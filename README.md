@@ -25,10 +25,17 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 | Âm thanh | ES8311 (MCLK 4, BCLK 5, DIN 6, WS 7, DOUT 8, PA 1) |
 | Thẻ nhớ | SDMMC 4-bit (38, 40, 39, 41, 48, 47) |
 
+## Nạp firmware trên trình duyệt
+
+👉 **https://khanhdev54.github.io/xiaozhi-es3c28p-vn/** (Chrome/Edge trên máy tính)
+
+Bấm **Kết nối** → chọn cổng COM → **Bắt đầu nạp**. Trang luôn có bản firmware mới nhất,
+tự cập nhật sau mỗi lần build. Mã nguồn trang nạp nằm trong thư mục [`web/`](web/).
+
 ## Tải firmware
 
 Mỗi lần push lên `main`, GitHub Actions tự build bản
-`xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav`:
+`xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav` rồi đăng lên trang nạp ở trên:
 
 1. Vào tab **Actions** → chọn lần chạy mới nhất (dấu ✓ xanh).
 2. Kéo xuống **Artifacts** → tải về, giải nén lấy `merged-binary.bin`.
