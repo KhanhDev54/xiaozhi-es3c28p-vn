@@ -32,6 +32,7 @@
 #include <arpa/inet.h>
 #include <font_awesome.h>
 #include "features/weather/weather_ui.h"
+#include "features/lunar/lunar_calendar.h"
 #include "ml307_board.h"
 #define TAG "Application"
 
@@ -1841,10 +1842,30 @@ void Application::UpdateIdleDisplay() {
         card.forecast = weather_info.forecast; // COPY DỮ LIỆU DỰ BÁO SANG UI
 
         card.icon = WeatherUI::GetWeatherIcon(weather_info.icon_code);
+
+        char range_buf[24];
+        snprintf(range_buf, sizeof(range_buf), "%d°/%d°", (int)round(weather_info.temp_min),
+                 (int)round(weather_info.temp_max));
+        card.range_text = range_buf;
+
+        if (weather_info.aqi >= 0) {
+            card.aqi_text = "AQI " + std::to_string(weather_info.aqi) + " · " +
+                            WeatherService::AqiLevel(weather_info.aqi);
+            card.aqi_color = WeatherService::AqiColor(weather_info.aqi);
+        }
     } else {
         card.city = "Dang cap nhat...";
         card.temperature_text = "--";
         card.icon = "\uf128"; 
+    }
+
+    // 4. ÂM LỊCH (tính offline, chỉ cần đồng hồ đã đồng bộ)
+    time_t now_ts = time(nullptr);
+    struct tm now_tm;
+    localtime_r(&now_ts, &now_tm);
+    if (now_tm.tm_year + 1900 >= 2024) {
+        auto ld = lunar::SolarToLunar(now_tm.tm_mday, now_tm.tm_mon + 1, now_tm.tm_year + 1900);
+        card.lunar_text = lunar::ShortText(ld);
     }
 
     auto display = Board::GetInstance().GetDisplay();

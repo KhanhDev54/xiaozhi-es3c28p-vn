@@ -4,6 +4,7 @@
 #include <esp_log.h>
 #include <time.h>
 #include <cstdio>
+#include <string>
 
 // --- 1. KHAI BÁO FONTS ---
 LV_FONT_DECLARE(font_awesome_30_4);
@@ -196,7 +197,7 @@ void WeatherUI::SetupIdleUI(lv_obj_t* parent, int screen_width, int screen_heigh
     
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(container_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(container_, 8, 0);
+    lv_obj_set_style_pad_row(container_, 4, 0);
 
     // --- 2. HEADER (PIN, WIFI) ---
     lv_obj_t* row_header = lv_obj_create(container_);
@@ -303,7 +304,7 @@ void WeatherUI::SetupIdleUI(lv_obj_t* parent, int screen_width, int screen_heigh
     
     lv_obj_set_flex_flow(group_weather_, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(group_weather_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(group_weather_, 20, 0); 
+    lv_obj_set_style_pad_column(group_weather_, 12, 0); 
 
     label_main_icon_ = lv_label_create(group_weather_);
     lv_obj_set_style_text_font(label_main_icon_, &font_awesome_30_4, 0);
@@ -314,6 +315,26 @@ void WeatherUI::SetupIdleUI(lv_obj_t* parent, int screen_width, int screen_heigh
     lv_obj_set_style_text_font(label_main_temp_, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(label_main_temp_, COLOR_ORANGE, 0);
     lv_label_set_text(label_main_temp_, "--°C");
+
+    // Cột phụ: mô tả + cao/thấp, AQI
+    lv_obj_t* col = lv_obj_create(group_weather_);
+    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(col, 0, 0);
+    lv_obj_set_style_pad_all(col, 0, 0);
+    lv_obj_set_style_pad_row(col, 0, 0);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+
+    label_desc_ = lv_label_create(col);
+    lv_obj_set_style_text_font(label_desc_, &font_puhui_20_4, 0);
+    lv_obj_set_style_text_color(label_desc_, COLOR_WHITE, 0);
+    lv_label_set_text(label_desc_, "");
+
+    label_aqi_ = lv_label_create(col);
+    lv_obj_set_style_text_font(label_aqi_, &font_puhui_20_4, 0);
+    lv_obj_set_style_text_color(label_aqi_, COLOR_GRAY, 0);
+    lv_label_set_text(label_aqi_, "");
 }
 
 void WeatherUI::ShowIdleCard(const IdleCardInfo& info) {
@@ -354,10 +375,20 @@ void WeatherUI::ShowIdleCard(const IdleCardInfo& info) {
 
     // --- CẬP NHẬT NGÀY THÁNG ---
     if (label_full_date_) {
-        char date_buf[64];
-        snprintf(date_buf, sizeof(date_buf), "%s, %02d/%02d/%04d",
-                 (ti.tm_wday >= 0 && ti.tm_wday <= 6) ? weekday_str[ti.tm_wday] : "",
-                 ti.tm_mday, ti.tm_mon + 1, ti.tm_year + 1900);
+        char date_buf[96];
+        if (!info.lunar_text.empty()) {
+            // "Thứ Tư 04/11/2026 · 26/9 ÂL"
+            std::string lunar = info.lunar_text;
+            size_t p = lunar.find(" âm lịch");
+            if (p != std::string::npos) lunar = lunar.substr(0, p) + " ÂL";
+            snprintf(date_buf, sizeof(date_buf), "%s %02d/%02d/%04d · %s",
+                     (ti.tm_wday >= 0 && ti.tm_wday <= 6) ? weekday_str[ti.tm_wday] : "",
+                     ti.tm_mday, ti.tm_mon + 1, ti.tm_year + 1900, lunar.c_str());
+        } else {
+            snprintf(date_buf, sizeof(date_buf), "%s, %02d/%02d/%04d",
+                     (ti.tm_wday >= 0 && ti.tm_wday <= 6) ? weekday_str[ti.tm_wday] : "",
+                     ti.tm_mday, ti.tm_mon + 1, ti.tm_year + 1900);
+        }
         lv_label_set_text(label_full_date_, date_buf);
     }
 
@@ -371,6 +402,15 @@ void WeatherUI::ShowIdleCard(const IdleCardInfo& info) {
     // --- CẬP NHẬT THỜI TIẾT ---
     if (label_main_temp_) lv_label_set_text(label_main_temp_, info.temperature_text.c_str());
     if (info.icon && label_main_icon_) lv_label_set_text(label_main_icon_, info.icon);
+    if (label_desc_) {
+        std::string desc = info.description_text;
+        if (!info.range_text.empty()) desc += (desc.empty() ? "" : " · ") + info.range_text;
+        lv_label_set_text(label_desc_, desc.c_str());
+    }
+    if (label_aqi_) {
+        lv_label_set_text(label_aqi_, info.aqi_text.c_str());
+        if (info.aqi_color) lv_obj_set_style_text_color(label_aqi_, lv_color_hex(info.aqi_color), 0);
+    }
 
     lv_obj_remove_flag(container_, LV_OBJ_FLAG_HIDDEN);
 }

@@ -9,7 +9,9 @@
 struct ForecastItem {
     std::string day_name; // Ví dụ: "T2", "T3"
     std::string icon_code; // Mã icon
-    float temp;           // Nhiệt độ dự báo
+    float temp;           // Nhiệt độ dự báo (cao nhất trong ngày)
+    float temp_min = 0.0f; // Nhiệt độ thấp nhất trong ngày
+    int rain_prob = 0;    // Khả năng mưa (%)
 };
 
 // Cấu trúc thông tin thời tiết (Lấy từ API về)
@@ -22,6 +24,11 @@ struct WeatherInfo {
     float feels_like = 0.0f;
     int pressure = 0;
     float wind_speed = 0.0f;
+    float temp_max = 0.0f;  // cao nhất hôm nay
+    float temp_min = 0.0f;  // thấp nhất hôm nay
+    int aqi = -1;           // US AQI (Open-Meteo), -1 = chưa có
+    float latitude = 0.0f;
+    float longitude = 0.0f;
     bool valid = false;
 
     std::vector<ForecastItem> forecast; 
@@ -39,6 +46,10 @@ struct IdleCardInfo {
     std::string feels_like_text;
     std::string wind_text;
     std::string pressure_text;
+    std::string lunar_text;     // "26/9 âm lịch"
+    std::string aqi_text;       // "AQI 96 · Trung bình"
+    uint32_t aqi_color = 0;     // màu theo mức AQI
+    std::string range_text;     // "24°/31°"
     std::string battery_icon;
     std::string network_icon;
     const char* icon = nullptr;

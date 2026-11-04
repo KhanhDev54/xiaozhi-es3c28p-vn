@@ -7,6 +7,8 @@
 #include <memory>
 #include <ctime>
 
+// Weather data from Open-Meteo (https://open-meteo.com) — free, no API key.
+// Location: NVS "wifi/weather_city" if set (geocoded), otherwise detected by IP.
 class WeatherService {
 public:
     static WeatherService& GetInstance() {
@@ -17,14 +19,8 @@ public:
     WeatherService(const WeatherService&) = delete;
     WeatherService& operator=(const WeatherService&) = delete;
 
-    // Fetch weather data from API
+    // Fetch current weather, 5-day forecast and air quality
     bool FetchWeatherData();
-
-    // Fetch current weather data from API
-    bool FetchCurrentWeatherData(const std::string& city, const std::string& api_key);
-
-    // Fetch 5-day forecast data from API
-    bool FetchForecastData(const std::string& city, const std::string& api_key);
 
     // Get current weather info
     const WeatherInfo& GetWeatherInfo() const { return weather_info_; }
@@ -32,31 +28,39 @@ public:
     // Check if weather data needs update
     bool NeedsUpdate() const;
 
-    // Get city from IP address
-    static std::string GetCityFromIP();
-
-    // Set API key
-    void SetApiKey(const std::string& api_key) { api_key_ = api_key; }
-
-    // Set city manually
+    // Set city manually (name, geocoded via Open-Meteo)
     void SetCity(const std::string& city) { city_ = city; }
+
+    // Helpers shared with UI
+    static const char* WmoToIconCode(int wmo, bool is_day);
+    static const char* WmoToVietnamese(int wmo);
+    static const char* AqiLevel(int aqi);
+    static uint32_t AqiColor(int aqi);
 
 private:
     WeatherService();
     ~WeatherService() = default;
 
-    WeatherInfo weather_info_;
-    std::string api_key_;
-    std::string city_;
-    uint32_t last_update_time_;
+    struct Location {
+        std::string name;
+        float lat = 0;
+        float lon = 0;
+        bool valid = false;
+    };
 
-    // Helper function to encode URL
+    Location LocationFromIP();
+    Location LocationFromName(const std::string& name);
+    bool FetchForecast(const Location& loc);
+    void FetchAirQuality(const Location& loc);
+    std::string HttpGet(const std::string& url);
+
     static std::string UrlEncode(const std::string& value);
+    static std::string DayNameFromDate(const std::string& yyyy_mm_dd);
 
-    // Helper function to capitalize words
-    static std::string CapitalizeWords(std::string str);
-
-    static std::string GetDayNameFromTime(time_t timestamp);
+    WeatherInfo weather_info_;
+    std::string city_;
+    Location cached_location_;
+    uint32_t last_update_time_;
 };
 
 #endif // WEATHER_SERVICE_H

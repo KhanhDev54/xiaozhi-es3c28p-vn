@@ -38,6 +38,8 @@ private:
     lv_obj_t* group_weather_; 
     lv_obj_t* label_main_temp_;
     lv_obj_t* label_main_icon_;
+    lv_obj_t* label_desc_ = nullptr;  // "Mưa rào · 24°/31°"
+    lv_obj_t* label_aqi_ = nullptr;   // "AQI 96 · Trung bình"
 };
 
 #endif // WEATHER_UI_H
