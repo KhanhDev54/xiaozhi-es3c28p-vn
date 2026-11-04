@@ -98,7 +98,7 @@ Lần đầu kết nối mạng, màn hình (và loa) sẽ đọc một **mã k�
 
 Có 3 cách bắt đầu nói chuyện:
 
-- Nói từ đánh thức **"Nǐ hǎo Xiǎozhì"** (你好小智 — đọc gần như *"ni hao xiao chư"*).
+- Nói từ đánh thức **"Sophia"** (đọc *"Sô-phia"*). Nói rõ, bình thường, cách mạch khoảng 1–3 m.
 - **Chạm 2 lần** liên tiếp lên màn hình.
 - Bấm nút **BOOT** một lần.
 
@@ -206,6 +206,21 @@ Cần ESP-IDF 5.4 hoặc 5.5.
 python scripts/release.py xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8 --name xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav
 idf.py -p COM5 flash monitor
 ```
+
+### Đổi từ đánh thức
+
+Từ đánh thức được nhận dạng **offline trên chip** bằng mô hình WakeNet của
+[ESP-SR](https://github.com/espressif/esp-sr). Espressif chưa có mô hình tiếng Việt,
+nên bản này dùng từ tiếng Anh **"Sophia"**. Muốn đổi, sửa 2 dòng trong
+`main/boards/xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8/config.json` (bản `-nav`):
+
+```
+"CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+"CONFIG_SR_WN_WN9_SOPHIA_TTS=y"
+```
+
+Thay `SOPHIA_TTS` bằng mô hình khác, ví dụ `ALEXA`, `JARVIS_TTS`, `HIESP`
+(xem danh sách trong `Kconfig.projbuild` của esp-sr).
 
 ### Các file quan trọng
 

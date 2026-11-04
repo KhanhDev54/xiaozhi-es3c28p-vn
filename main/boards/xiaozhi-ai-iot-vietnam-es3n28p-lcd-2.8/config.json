@@ -31,7 +31,10 @@
                 "CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y",
                 "CONFIG_BT_NIMBLE_SECURITY_ENABLE=n",
                 "CONFIG_PHONE_NAVIGATION_ENABLE=y",
-                "CONFIG_PHONE_NAVIGATION_BLE_NAME=\"Xiaozhi-Nav\""
+                "CONFIG_PHONE_NAVIGATION_BLE_NAME=\"Xiaozhi-Nav\"",
+                "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+                "CONFIG_SR_WN_WN9_SOPHIA_TTS=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m_logo.csv\""
             ]
         }
     ]
