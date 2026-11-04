@@ -171,7 +171,7 @@ std::string AuspiciousHours(int dd, int mm, int yy) {
 }
 
 std::string ShortText(const LunarDate& d) {
-    char buf[32];
+    char buf[64];
     snprintf(buf, sizeof(buf), "%d/%d%s âm lịch", d.day, d.month, d.leap ? "N" : "");
     return buf;
 }

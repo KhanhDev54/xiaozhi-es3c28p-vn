@@ -1851,7 +1851,7 @@ void Application::UpdateIdleDisplay() {
 
         card.icon = WeatherUI::GetWeatherIcon(weather_info.icon_code);
 
-        char range_buf[24];
+        char range_buf[48];
         snprintf(range_buf, sizeof(range_buf), "%d°/%d°", (int)round(weather_info.temp_min),
                  (int)round(weather_info.temp_max));
         card.range_text = range_buf;
