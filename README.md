@@ -4,60 +4,237 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 (ES3C28P / ES3N28P, Freenove FNK0104 và các bản cùng thiết kế), có thêm
 **dẫn đường từ Google Maps trên điện thoại**.
 
-## Tính năng
+👉 **Trang nạp firmware:** https://khanhdev54.github.io/xiaozhi-es3c28p-vn/
 
-- Trò chuyện AI bằng giọng nói, icon cảm xúc
-- Nghe nhạc Việt (server nhạc), radio VOV, nhạc từ thẻ SD, lời bài hát, phổ nhạc
-- Đồng hồ + thời tiết khi rảnh (OpenWeatherMap, tự xác định thành phố theo IP)
-- Báo thức
-- Cảm ứng
-- **Dẫn đường**: điện thoại Android chạy Google Maps → app Chronos gửi qua Bluetooth →
-  màn hình hiện mũi tên rẽ, khoảng cách, tên đường, thời gian còn lại, giờ đến.
-  Xem [main/features/navigation/README.md](main/features/navigation/README.md).
+---
 
-## Phần cứng
+## Mục lục
 
-| Thành phần | Thông số |
+1. [Tính năng](#1-tính-năng)
+2. [Chuẩn bị](#2-chuẩn-bị)
+3. [Nạp firmware](#3-nạp-firmware)
+4. [Cài Wi-Fi lần đầu](#4-cài-wi-fi-lần-đầu)
+5. [Kích hoạt trên xiaozhi.me](#5-kích-hoạt-trên-xiaozhime)
+6. [Trò chuyện với Xiaozhi](#6-trò-chuyện-với-xiaozhi)
+7. [Thao tác chạm & nút bấm](#7-thao-tác-chạm--nút-bấm)
+8. [Nghe nhạc & radio](#8-nghe-nhạc--radio)
+9. [Đồng hồ & thời tiết](#9-đồng-hồ--thời-tiết)
+10. [Dẫn đường từ điện thoại](#10-dẫn-đường-từ-điện-thoại)
+11. [Xử lý sự cố](#11-xử-lý-sự-cố)
+12. [Dành cho người phát triển](#12-dành-cho-người-phát-triển)
+13. [Nguồn gốc & giấy phép](#13-nguồn-gốc--giấy-phép)
+
+---
+
+## 1. Tính năng
+
+| Tính năng | Ghi chú |
 |---|---|
-| Chip | ESP32-S3 N16R8 (16MB Flash, 8MB PSRAM) |
-| Màn hình | 2.8" ILI9341 240x320, SPI (CS 10, MOSI 11, SCK 12, DC 46, BL 45) |
-| Cảm ứng | FT6336/FT6236, I2C 0x38 (SCL 15, SDA 16, INT 17) |
-| Âm thanh | ES8311 (MCLK 4, BCLK 5, DIN 6, WS 7, DOUT 8, PA 1) |
-| Thẻ nhớ | SDMMC 4-bit (38, 40, 39, 41, 48, 47) |
+| 🗣️ Trò chuyện AI bằng giọng nói | Qua server xiaozhi.me, trả lời tiếng Việt |
+| 😊 Icon cảm xúc | Đổi theo nội dung câu trả lời |
+| 🎵 Nhạc Việt, radio VOV | Ra lệnh bằng giọng nói |
+| 🕒 Đồng hồ + 🌤️ thời tiết | Tự hiện khi không trò chuyện |
+| 👆 Cảm ứng | Vuốt chỉnh âm lượng, độ sáng; chạm 2 lần để nói |
+| 🧭 Dẫn đường | Google Maps trên Android → app Chronos → màn hình mạch |
 
-## Nạp firmware trên trình duyệt
+## 2. Chuẩn bị
 
-👉 **https://khanhdev54.github.io/xiaozhi-es3c28p-vn/** (Chrome/Edge trên máy tính)
+- Mạch **ESP32-S3 2.8" cảm ứng** loại **16MB Flash + 8MB PSRAM (N16R8)**.
+  Bản 4MB/8MB flash **không chạy được** firmware này.
+- Cáp **USB-C có truyền dữ liệu** (cáp chỉ sạc sẽ không nhận cổng COM).
+- Máy tính dùng **Chrome** hoặc **Edge**.
+- Loa gắn vào cổng **SPEAKER** trên mạch.
+- (Tuỳ chọn) Điện thoại **Android** cài app **Chronos** nếu muốn dùng dẫn đường.
 
-Bấm **Kết nối** → chọn cổng COM → **Bắt đầu nạp**. Trang luôn có bản firmware mới nhất,
-tự cập nhật sau mỗi lần build. Mã nguồn trang nạp nằm trong thư mục [`web/`](web/).
+## 3. Nạp firmware
 
-## Tải firmware
+### Cách 1 — Nạp trên trình duyệt (khuyên dùng)
 
-Mỗi lần push lên `main`, GitHub Actions tự build bản
-`xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav` rồi đăng lên trang nạp ở trên:
+1. Mở **https://khanhdev54.github.io/xiaozhi-es3c28p-vn/** bằng Chrome/Edge.
+2. Cắm mạch vào máy tính.
+3. Bấm **Kết nối** → chọn cổng COM của mạch (thường tên *USB JTAG/serial debug unit*
+   hoặc *USB Serial*) → **Connect**.
+   - Không thấy cổng? **Giữ nút BOOT**, bấm **RESET**, thả BOOT rồi bấm Kết nối lại.
+4. Firmware mới nhất đã được chọn sẵn, địa chỉ để nguyên **`0x0`**.
+5. **Lần đầu nạp**: tích ô *"Xoá toàn bộ flash trước khi nạp"*.
+6. Bấm **Bắt đầu nạp** và chờ thanh tiến trình chạy tới 100% (khoảng 1–3 phút).
+7. Mạch tự khởi động lại. Nếu màn hình vẫn đen, bấm **RESET**.
 
-1. Vào tab **Actions** → chọn lần chạy mới nhất (dấu ✓ xanh).
+### Cách 2 — Tải file về tự nạp
+
+1. Vào tab **Actions** của repo → chọn lần chạy mới nhất có dấu ✓ xanh.
 2. Kéo xuống **Artifacts** → tải về, giải nén lấy `merged-binary.bin`.
-3. Nạp ở địa chỉ `0x0` bằng web flasher hoặc:
+3. Nạp ở địa chỉ `0x0`, ví dụ bằng esptool:
    ```
-   esptool.py --chip esp32s3 -p COMx -b 460800 write_flash 0x0 merged-binary.bin
+   esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 merged-binary.bin
    ```
+   (đổi `COM5` thành cổng của bạn). Hoặc kéo thả file vào trang nạp ở Cách 1.
 
-Muốn build lại mà không sửa code: **Actions** → *Build ES3C28P 2.8" (VN + Navigation)* → **Run workflow**.
+## 4. Cài Wi-Fi lần đầu
 
-## Tự build trên máy
+1. Sau khi nạp, màn hình hiện hướng dẫn cài mạng kèm **tên Wi-Fi** do mạch phát ra
+   (bắt đầu bằng `Xiaozhi`) và **địa chỉ trang cài đặt** (thường là `http://192.168.4.1`).
+2. Trên điện thoại/máy tính, kết nối vào Wi-Fi đó.
+3. Trang cài đặt thường tự bật lên; nếu không, mở địa chỉ hiện trên màn hình.
+4. Chọn Wi-Fi nhà bạn (**chỉ hỗ trợ 2.4GHz**), nhập mật khẩu → lưu.
+5. Mạch tự khởi động lại và kết nối mạng.
+
+Muốn **đổi Wi-Fi** sau này: bấm nút **BOOT 5 lần liên tiếp** để vào lại chế độ cài mạng.
+
+## 5. Kích hoạt trên xiaozhi.me
+
+Lần đầu kết nối mạng, màn hình (và loa) sẽ đọc một **mã kích hoạt 6 số**.
+
+1. Vào **https://xiaozhi.me**, đăng nhập (đăng ký bằng số điện thoại/email).
+2. Vào **Console / 控制台** → **Thêm thiết bị (添加设备)** → nhập mã 6 số.
+3. Trong phần cấu hình **Agent** của thiết bị, bạn có thể:
+   - Chọn **ngôn ngữ** trả lời là tiếng Việt và giọng đọc phù hợp.
+   - Đặt tên, tính cách, lời giới thiệu cho trợ lý.
+4. Bấm RESET mạch để áp dụng.
+
+> Giao diện xiaozhi.me có thể đổi theo thời gian; tên các mục ở trên chỉ mang tính tham khảo.
+
+## 6. Trò chuyện với Xiaozhi
+
+Có 3 cách bắt đầu nói chuyện:
+
+- Nói từ đánh thức **"Nǐ hǎo Xiǎozhì"** (你好小智 — đọc gần như *"ni hao xiao chư"*).
+- **Chạm 2 lần** liên tiếp lên màn hình.
+- Bấm nút **BOOT** một lần.
+
+Khi trợ lý **đang nói**: chạm 2 lần hoặc bấm BOOT để **ngắt lời**.
+Khi trợ lý **đang nghe**: chạm 2 lần hoặc bấm BOOT để **kết thúc** cuộc trò chuyện.
+
+Ví dụ câu lệnh: *"Hôm nay thời tiết thế nào?"*, *"Tăng âm lượng lên 80"*,
+*"Giảm độ sáng màn hình"*, *"Kể chuyện cười đi"*.
+
+## 7. Thao tác chạm & nút bấm
+
+| Thao tác | Chức năng |
+|---|---|
+| Chạm 2 lần | Bắt đầu / dừng trò chuyện |
+| Vuốt **lên** | Tăng âm lượng (+5) |
+| Vuốt **xuống** | Giảm âm lượng (−5) |
+| Vuốt **phải** | Tăng độ sáng (+5) |
+| Vuốt **trái** | Giảm độ sáng (−5) |
+| Nhấn giữ khi đang phát nhạc | Tắt tiếng |
+| Nút **BOOT** 1 lần | Bắt đầu / dừng trò chuyện |
+| Nút **BOOT** 5 lần | Vào chế độ cài lại Wi-Fi |
+| Nút **RESET** | Khởi động lại mạch |
+
+## 8. Nghe nhạc & radio
+
+Ra lệnh bằng giọng nói, ví dụ:
+
+- *"Mở bài Lạc Trôi"*, *"Phát nhạc Sơn Tùng"*
+- *"Mở radio VOV1"*, *"Nghe VOV Giao thông Hà Nội"* (có VOV1, VOV2, VOV3, VOV5, VOV Giao thông Hà Nội / TP.HCM…)
+- *"Dừng nhạc"*, *"Bài tiếp theo"*
+
+Khi phát nhạc, màn hình hiện phổ nhạc và lời bài hát (nếu có).
+
+> **Nhạc từ thẻ SD** chưa được bật trong bản build hiện tại.
+
+## 9. Đồng hồ & thời tiết
+
+Khi không trò chuyện, màn hình tự chuyển sang **đồng hồ + thời tiết**:
+giờ, ngày, thành phố, nhiệt độ và biểu tượng thời tiết.
+
+- Thành phố được **tự xác định theo địa chỉ IP** mạng nhà bạn.
+- Dữ liệu lấy từ OpenWeatherMap. Key mặc định là key dùng chung của tác giả gốc,
+  có thể bị hết lượt; xem [mục 12](#12-dành-cho-người-phát-triển) để thay key riêng.
+
+## 10. Dẫn đường từ điện thoại
+
+Điện thoại Android chạy Google Maps → app **Chronos** đọc chỉ dẫn → gửi qua Bluetooth
+→ màn hình hiện **mũi tên rẽ, khoảng cách, tên đường, thời gian còn lại, giờ đến**.
+Mỗi khi có chỉ dẫn mới, loa kêu "bíp".
+
+### Cài đặt (làm 1 lần)
+
+1. Cài app **Chronos** trên điện thoại Android (Google Play).
+2. Bật **Bluetooth** trên điện thoại.
+3. Mở Chronos → thêm thiết bị → chọn **`Xiaozhi-Nav`**.
+   Màn hình mạch hiện *"Đã kết nối điện thoại"*.
+4. Trong Chronos, cấp quyền **đọc thông báo** và bật tính năng **dẫn đường / Navigation**.
+
+### Sử dụng
+
+1. Mở **Google Maps**, chọn điểm đến → **Bắt đầu**.
+2. Màn hình mạch tự chuyển sang trang dẫn đường.
+3. Kết thúc chỉ đường → màn hình quay về giao diện chat / đồng hồ.
+
+> - Chỉ hỗ trợ **Android**; iPhone chưa được kiểm chứng.
+> - Mạch **không có GPS** — vị trí lấy từ điện thoại, nên điện thoại phải đi cùng mạch.
+> - Tên các mục trong app Chronos có thể khác đôi chút tuỳ phiên bản.
+
+Chi tiết kỹ thuật: [main/features/navigation/README.md](main/features/navigation/README.md).
+
+## 11. Xử lý sự cố
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| Trang nạp không thấy cổng COM | Đổi cáp USB có truyền dữ liệu; giữ BOOT + bấm RESET; cài driver CH340/CP210x nếu mạch dùng chip đó |
+| Nạp báo lỗi giữa chừng | Giảm **Tốc độ** xuống 115200, thử lại |
+| Màn hình đen sau khi nạp | Bấm RESET; kiểm tra mạch đúng loại 16MB |
+| Khởi động lại liên tục | Nạp lại với ô *Xoá toàn bộ flash* được tích |
+| Không cài được Wi-Fi | Wi-Fi nhà phải là **2.4GHz**; bấm BOOT 5 lần để cài lại |
+| Không nghe tiếng | Kiểm tra loa cắm cổng SPEAKER; vuốt lên để tăng âm lượng |
+| Chronos không thấy `Xiaozhi-Nav` | Bật Bluetooth + quyền vị trí cho Chronos; RESET mạch rồi tìm lại |
+| Thời tiết không hiện | Key OpenWeatherMap dùng chung có thể hết lượt — thay key riêng |
+
+Nếu vẫn lỗi, mở **Issues** của repo và đính kèm log (trang nạp có khung Log, hoặc chạy
+`idf.py monitor`).
+
+## 12. Dành cho người phát triển
+
+### Build tự động (GitHub Actions)
+
+Mỗi lần push lên `main` (trừ khi chỉ sửa file `.md`), workflow
+[`build-es3c28p-nav.yml`](.github/workflows/build-es3c28p-nav.yml) sẽ:
+
+1. Build bản `xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav` bằng ESP-IDF 5.5.
+2. Lưu file `.bin` vào **Artifacts** (giữ 30 ngày).
+3. Đăng trang nạp + firmware mới nhất lên **GitHub Pages**.
+
+Build lại thủ công: **Actions → Build ES3C28P 2.8" (VN + Navigation) → Run workflow**.
+
+### Build trên máy
 
 Cần ESP-IDF 5.4 hoặc 5.5.
 
 ```
 python scripts/release.py xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8 --name xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8-nav
+idf.py -p COM5 flash monitor
 ```
 
-## Nguồn gốc & giấy phép
+### Các file quan trọng
+
+| File | Nội dung |
+|---|---|
+| `main/boards/xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8/config.h` | Chân GPIO, xoay màn hình (`LCD_ROTATION_DEGREE`) |
+| `main/boards/xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8/config.json` | Các bản build và tuỳ chọn sdkconfig |
+| `main/features/navigation/` | Bluetooth (Chronos) + giao diện dẫn đường |
+| `main/features/weather/weather_config.h` | Key OpenWeatherMap |
+| `web/` | Trang nạp firmware |
+
+> **Không** đưa mật khẩu Wi-Fi hay API key riêng lên repo công khai.
+
+### Sơ đồ chân
+
+| Thành phần | Chân |
+|---|---|
+| Chip | ESP32-S3 N16R8 (16MB Flash, 8MB PSRAM) |
+| Màn hình ILI9341 240x320 (SPI) | CS 10, MOSI 11, SCK 12, MISO 13, DC 46, BL 45 |
+| Cảm ứng FT6236/FT6336 (I2C 0x38) | SCL 15, SDA 16, INT 17, RST 18 |
+| Âm thanh ES8311 | MCLK 4, BCLK 5, DIN 6, WS 7, DOUT 8, PA 1 |
+| Thẻ nhớ SDMMC 4-bit | CLK 38, CMD 40, D0 39, D1 41, D2 48, D3 47 |
+| Nút BOOT | GPIO 0 |
+
+## 13. Nguồn gốc & giấy phép
 
 - Dựa trên [Ngthhoang/xiaozhi-vn-ricky0611](https://github.com/Ngthhoang/xiaozhi-vn-ricky0611)
   (commit `0a79f26`), vốn là bản fork của [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32).
   README gốc: [README_ricky.md](README_ricky.md).
 - Giao thức dẫn đường theo [fbiego/chronos-esp32](https://github.com/fbiego/chronos-esp32) (MIT, Felix Biego).
+- Trang nạp dùng [esptool-js](https://github.com/espressif/esptool-js) của Espressif.
 - Giấy phép MIT — xem [LICENSE](LICENSE).
