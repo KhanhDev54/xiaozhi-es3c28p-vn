@@ -51,7 +51,7 @@ uint16_t Crc16(const std::string& data) {
 }
 
 static std::string Tlv(const char* id, const std::string& value) {
-    char len[3];
+    char len[12];
     snprintf(len, sizeof(len), "%02d", (int)value.size());
     return std::string(id) + len + value;
 }
@@ -84,7 +84,7 @@ std::string BuildPayload(const std::string& bin, const std::string& account, uin
         p += Tlv("62", Tlv("08", msg));
     }
     p += "6304";
-    char crc[5];
+    char crc[8];
     snprintf(crc, sizeof(crc), "%04X", Crc16(p));
     return p + crc;
 }

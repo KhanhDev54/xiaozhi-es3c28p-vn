@@ -251,7 +251,7 @@ void AlarmManager::Tick() {
             }
         }
         if (fire) {
-            char title[32];
+            char title[64];
             snprintf(title, sizeof(title), "Báo thức %02d:%02d", fired.hour, fired.minute);
             Ring(title, fired.label.empty() ? "Đến giờ rồi!" : fired.label);
         }
@@ -282,7 +282,7 @@ void AlarmManager::Start() {
 // ---------------------------------------------------------------- MCP tools
 
 static std::string Hhmm(int h, int m) {
-    char b[8];
+    char b[32];
     snprintf(b, sizeof(b), "%02d:%02d", h, m);
     return b;
 }
@@ -389,7 +389,7 @@ void AlarmManager::RegisterTools() {
             }
             int d = t.tm_mday, m = t.tm_mon + 1, y = t.tm_year + 1900;
             auto l = lunar::SolarToLunar(d, m, y);
-            char solar[16];
+            char solar[40];
             snprintf(solar, sizeof(solar), "%02d/%02d/%04d", d, m, y);
             cJSON* o = cJSON_CreateObject();
             cJSON_AddStringToObject(o, "solar_date", solar);

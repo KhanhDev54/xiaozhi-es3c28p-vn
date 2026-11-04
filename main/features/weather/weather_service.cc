@@ -69,7 +69,7 @@ const char* WeatherService::WmoToIconCode(int wmo, bool is_day) {
     else if (wmo == 85 || wmo == 86) base = "13";
     else if (wmo >= 95) base = "11";
     else base = "03";
-    static char buf[4];
+    static char buf[8];
     snprintf(buf, sizeof(buf), "%s%c", base, is_day ? 'd' : 'n');
     return buf;
 }
