@@ -36,6 +36,8 @@ public:
     void StopRinging();
     bool IsRinging() const { return ringing_; }
     void SetNightMode(bool enabled, int start_hour, int end_hour);
+    // Keep the screen at normal brightness for a while (e.g. new bank alert)
+    void WakeScreen(int seconds);
 
 private:
     AlarmManager() = default;
@@ -62,6 +64,7 @@ private:
     int night_start_ = 22;
     int night_end_ = 6;
     bool night_active_ = false;
+    int64_t wake_until_us_ = 0;
 };
 
 #endif  // ALARM_MANAGER_H

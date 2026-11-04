@@ -15,6 +15,7 @@
 #include "display.h"
 #include "mcp_server.h"
 #include "settings.h"
+#include "features/lunar/lunar_calendar.h"
 
 #define TAG "AlarmManager"
 
@@ -136,6 +137,14 @@ void AlarmManager::SetNightMode(bool enabled, int start_hour, int end_hour) {
     Save();
 }
 
+void AlarmManager::WakeScreen(int seconds) {
+    wake_until_us_ = esp_timer_get_time() + (int64_t)seconds * 1000000;
+    if (night_active_) {
+        if (auto* bl = Board::GetInstance().GetBacklight()) bl->RestoreBrightness();
+        night_active_ = false;
+    }
+}
+
 void AlarmManager::StopRinging() {
     if (!ringing_) return;
     ringing_ = false;
@@ -171,6 +180,7 @@ void AlarmManager::UpdateNightMode(int hour) {
         in_range = hour >= night_start_ || hour < night_end_;
     }
     bool want = night_enabled_ && in_range && !ringing_ &&
+                esp_timer_get_time() >= wake_until_us_ &&
                 app.GetDeviceState() == kDeviceStateIdle && !app.IsMediaPlaying();
     if (want && !night_active_) {
         ESP_LOGI(TAG, "Night mode on");
@@ -364,6 +374,34 @@ void AlarmManager::RegisterTools() {
         [this](const PropertyList&) -> ReturnValue {
             CancelTimer();
             return true;
+        });
+
+    mcp.AddTool("self.calendar.today",
+        "Ngày hôm nay theo dương lịch và ÂM LỊCH Việt Nam: ngày/tháng/năm âm, can chi của năm,\n"
+        "tháng, ngày và các giờ hoàng đạo. Dùng khi người dùng hỏi về âm lịch, ngày rằm, mùng 1, giờ tốt.",
+        PropertyList(),
+        [](const PropertyList&) -> ReturnValue {
+            time_t now = time(nullptr);
+            struct tm t;
+            localtime_r(&now, &t);
+            if (t.tm_year + 1900 < 2024) {
+                return "{\"success\": false, \"message\": \"Thiết bị chưa đồng bộ giờ\"}";
+            }
+            int d = t.tm_mday, m = t.tm_mon + 1, y = t.tm_year + 1900;
+            auto l = lunar::SolarToLunar(d, m, y);
+            char solar[16];
+            snprintf(solar, sizeof(solar), "%02d/%02d/%04d", d, m, y);
+            cJSON* o = cJSON_CreateObject();
+            cJSON_AddStringToObject(o, "solar_date", solar);
+            cJSON_AddNumberToObject(o, "lunar_day", l.day);
+            cJSON_AddNumberToObject(o, "lunar_month", l.month);
+            cJSON_AddNumberToObject(o, "lunar_year", l.year);
+            cJSON_AddBoolToObject(o, "leap_month", l.leap);
+            cJSON_AddStringToObject(o, "year_can_chi", lunar::YearCanChi(l.year).c_str());
+            cJSON_AddStringToObject(o, "month_can_chi", lunar::MonthCanChi(l.month, l.year).c_str());
+            cJSON_AddStringToObject(o, "day_can_chi", lunar::DayCanChi(d, m, y).c_str());
+            cJSON_AddStringToObject(o, "gio_hoang_dao", lunar::AuspiciousHours(d, m, y).c_str());
+            return o;
         });
 
     mcp.AddTool("self.night_mode.set",

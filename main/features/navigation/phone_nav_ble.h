@@ -47,6 +47,10 @@ public:
     // Start BLE advertising with the given device name. Safe to call once.
     bool Start(const std::string& device_name, Callback callback);
 
+    // Phone notifications forwarded by the Chronos app (title: message)
+    using NotificationCallback = std::function<void(int icon, const std::string& text)>;
+    void SetNotificationCallback(NotificationCallback cb) { notification_cb_ = std::move(cb); }
+
     PhoneNavState GetState();
 
     // Internal: called from NimBLE callbacks
@@ -68,6 +72,7 @@ private:
     std::mutex mutex_;
     PhoneNavState state_;
     Callback callback_;
+    NotificationCallback notification_cb_;
     bool started_ = false;
     bool chunked_ = false;
     uint16_t conn_handle_ = 0xFFFF;

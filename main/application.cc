@@ -35,6 +35,7 @@
 #include "features/lunar/lunar_calendar.h"
 #include "features/vietqr/vietqr_tools.h"
 #include "features/alarm_clock/alarm_manager.h"
+#include "features/bank_alert/bank_alert.h"
 #include "ml307_board.h"
 #define TAG "Application"
 
@@ -437,6 +438,7 @@ void Application::Start() {
     // VietQR (QR nhận tiền) + báo thức / hẹn giờ / chế độ ban đêm
     vietqr::RegisterTools();
     AlarmManager::GetInstance().Start();
+    bank::RegisterTools();
 
     // Initialize media components and register their MCP tools
     InitMusic();

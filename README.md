@@ -20,9 +20,12 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 8. [Nghe nhạc & radio](#8-nghe-nhạc--radio)
 9. [Đồng hồ & thời tiết](#9-đồng-hồ--thời-tiết)
 10. [Dẫn đường từ điện thoại](#10-dẫn-đường-từ-điện-thoại)
-11. [Xử lý sự cố](#11-xử-lý-sự-cố)
-12. [Dành cho người phát triển](#12-dành-cho-người-phát-triển)
-13. [Nguồn gốc & giấy phép](#13-nguồn-gốc--giấy-phép)
+11. [Báo chuyển khoản](#11-báo-chuyển-khoản)
+12. [QR nhận tiền (VietQR)](#12-qr-nhận-tiền-vietqr)
+13. [Báo thức, hẹn giờ, chế độ ban đêm](#13-báo-thức-hẹn-giờ-chế-độ-ban-đêm)
+14. [Xử lý sự cố](#14-xử-lý-sự-cố)
+15. [Dành cho người phát triển](#15-dành-cho-người-phát-triển)
+16. [Nguồn gốc & giấy phép](#16-nguồn-gốc--giấy-phép)
 
 ---
 
@@ -33,9 +36,13 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 | 🗣️ Trò chuyện AI bằng giọng nói | Qua server xiaozhi.me, trả lời tiếng Việt |
 | 😊 Icon cảm xúc | Đổi theo nội dung câu trả lời |
 | 🎵 Nhạc Việt, radio VOV | Ra lệnh bằng giọng nói |
-| 🕒 Đồng hồ + 🌤️ thời tiết | Tự hiện khi không trò chuyện |
+| 🕒 Đồng hồ + 🌤️ thời tiết + 📅 âm lịch | Tự hiện khi rảnh; có chỉ số không khí AQI |
 | 👆 Cảm ứng | Vuốt chỉnh âm lượng, độ sáng; chạm 2 lần để nói |
 | 🧭 Dẫn đường | Google Maps trên Android → app Chronos → màn hình mạch |
+| 💰 Báo chuyển khoản | Thông báo app ngân hàng → "ting" + hiện số tiền |
+| 🔳 QR nhận tiền | VietQR, nói "hiện QR 50 nghìn" |
+| ⏰ Báo thức, hẹn giờ | Ra lệnh bằng giọng nói |
+| 🌙 Chế độ ban đêm | Tự giảm độ sáng 22h–6h |
 
 ## 2. Chuẩn bị
 
@@ -44,7 +51,8 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 - Cáp **USB-C có truyền dữ liệu** (cáp chỉ sạc sẽ không nhận cổng COM).
 - Máy tính dùng **Chrome** hoặc **Edge**.
 - Loa gắn vào cổng **SPEAKER** trên mạch.
-- (Tuỳ chọn) Điện thoại **Android** cài app **Chronos** nếu muốn dùng dẫn đường.
+- (Tuỳ chọn) Điện thoại **Android** cài app **Chronos** nếu muốn dùng dẫn đường
+  và báo chuyển khoản.
 
 ## 3. Nạp firmware
 
@@ -137,11 +145,17 @@ Khi phát nhạc, màn hình hiện phổ nhạc và lời bài hát (nếu có)
 ## 9. Đồng hồ & thời tiết
 
 Khi không trò chuyện, màn hình tự chuyển sang **đồng hồ + thời tiết**:
-giờ, ngày, thành phố, nhiệt độ và biểu tượng thời tiết.
 
-- Thành phố được **tự xác định theo địa chỉ IP** mạng nhà bạn.
-- Dữ liệu lấy từ OpenWeatherMap. Key mặc định là key dùng chung của tác giả gốc,
-  có thể bị hết lượt; xem [mục 12](#12-dành-cho-người-phát-triển) để thay key riêng.
+- Giờ (đồng hồ lật), thứ, ngày dương lịch **và âm lịch** (ví dụ `Thứ Tư 04/11/2026 · 26/9 ÂL`).
+- Thành phố, nhiệt độ, mô tả (*Mưa rào*, *Nhiều mây*…), nhiệt độ thấp/cao trong ngày.
+- **Chất lượng không khí AQI** kèm mức: Tốt (xanh), Trung bình (vàng), Kém (cam), Xấu (đỏ)…
+
+Ghi chú:
+
+- Dữ liệu thời tiết lấy từ [Open-Meteo](https://open-meteo.com) — **miễn phí, không cần key**.
+- Thành phố được **tự xác định theo địa chỉ IP** mạng nhà bạn; cập nhật 30 phút/lần.
+- Âm lịch tính ngay trên mạch (không cần mạng), theo múi giờ Việt Nam.
+- Hỏi trợ lý *"Hôm nay âm lịch ngày mấy?"*, *"Giờ hoàng đạo hôm nay?"* thì trợ lý trả lời bằng giọng.
 
 ## 10. Dẫn đường từ điện thoại
 
@@ -169,7 +183,64 @@ Mỗi khi có chỉ dẫn mới, loa kêu "bíp".
 
 Chi tiết kỹ thuật: [main/features/navigation/README.md](main/features/navigation/README.md).
 
-## 11. Xử lý sự cố
+## 11. Báo chuyển khoản
+
+Khi có tiền vào tài khoản, loa kêu **"ting"** và màn hình hiện số tiền
+(ví dụ `+150.000đ · Tien nha thang 11`) trong 10 giây — kể cả lúc đang ở chế độ ban đêm.
+
+### Cài đặt
+
+1. Làm phần **Cài đặt** của [mục 10](#10-dẫn-đường-từ-điện-thoại) (kết nối Chronos với `Xiaozhi-Nav`).
+2. Trong Chronos, phần chọn **ứng dụng được chuyển thông báo**, bật **app ngân hàng** của bạn
+   (Vietcombank, MB, Techcombank, MoMo…).
+3. Trong app ngân hàng, bật **thông báo biến động số dư** trên điện thoại.
+
+### Sử dụng
+
+- Tự động: có tiền vào là kêu và hiện.
+- Hỏi: *"Hôm nay mình nhận được bao nhiêu tiền?"*, *"Giao dịch gần nhất là gì?"*.
+- Tắt / bật: *"Tắt báo chuyển khoản"*, *"Báo cả tiền ra nữa"*.
+
+> - Hoạt động khi **điện thoại ở gần mạch** (Bluetooth) và thông báo hiện trên điện thoại.
+> - Mạch đọc số tiền từ nội dung thông báo; mỗi ngân hàng viết một kiểu nên có thể
+>   có app chưa nhận đúng — gửi mẫu thông báo (che số tài khoản, số dư) qua Issues để bổ sung.
+> - Lịch sử chỉ lưu **20 giao dịch trong RAM**, mất khi tắt máy; **không lưu số dư**.
+
+## 12. QR nhận tiền (VietQR)
+
+Hiện mã **VietQR** trên màn hình để người khác quét bằng app ngân hàng bất kỳ.
+
+1. Lưu tài khoản (làm 1 lần), nói: *"Lưu tài khoản nhận tiền Vietcombank số 0123456789,
+   tên NGUYEN VAN A"*. Thông tin lưu trên mạch, không đưa lên GitHub.
+2. Hiện QR: *"Hiện QR nhận tiền"* (người chuyển tự nhập số tiền) hoặc
+   *"Cho mình QR 50 nghìn, nội dung tien an trua"*.
+3. QR tự ẩn khi bạn bắt đầu nói chuyện lại.
+
+Ngân hàng hỗ trợ theo tên: Vietcombank, VietinBank, BIDV, Agribank, MB, Techcombank, ACB,
+VPBank, TPBank, Sacombank, VIB, SHB, HDBank, OCB, MSB, SeABank, Eximbank, LPBank, Nam A Bank,
+Bac A Bank, ABBANK, Kienlongbank, PVcomBank. Ngân hàng khác: đọc **mã BIN 6 số** của ngân hàng.
+
+> Hãy quét thử bằng app ngân hàng và kiểm tra **tên người nhận** trước khi dùng thật.
+
+## 13. Báo thức, hẹn giờ, chế độ ban đêm
+
+| Câu lệnh mẫu | Kết quả |
+|---|---|
+| *"Đặt báo thức 6 giờ 30 sáng"* | Báo thức một lần |
+| *"Báo thức 7 giờ mỗi ngày, nhãn đi làm"* | Báo thức lặp hằng ngày |
+| *"Mình có những báo thức nào?"* | Liệt kê báo thức |
+| *"Xoá báo thức thứ nhất"* / *"Xoá hết báo thức"* | Xoá |
+| *"Hẹn giờ 10 phút"*, *"Hẹn giờ 90 giây luộc trứng"* | Đếm ngược |
+| *"Tắt báo thức"* | Tắt chuông đang kêu |
+| *"Bật chế độ ban đêm từ 23 giờ đến 6 giờ"* | Đổi khung giờ ban đêm |
+
+- Chuông kêu tối đa **1 phút**; chạm 2 lần / bấm BOOT / bắt đầu nói chuyện để tắt.
+- Báo thức lưu trong bộ nhớ mạch, **không mất khi tắt nguồn** (tối đa 8 báo thức).
+- **Chế độ ban đêm** (mặc định bật, 22h–6h): khi rảnh màn hình tự giảm còn 5% độ sáng;
+  khi trò chuyện, phát nhạc, báo thức hoặc có tiền vào thì sáng lại.
+- Cần mạch đã có giờ chuẩn (đã kết nối mạng ít nhất một lần sau khi bật).
+
+## 14. Xử lý sự cố
 
 | Hiện tượng | Cách xử lý |
 |---|---|
@@ -180,12 +251,14 @@ Chi tiết kỹ thuật: [main/features/navigation/README.md](main/features/navi
 | Không cài được Wi-Fi | Wi-Fi nhà phải là **2.4GHz**; bấm BOOT 5 lần để cài lại |
 | Không nghe tiếng | Kiểm tra loa cắm cổng SPEAKER; vuốt lên để tăng âm lượng |
 | Chronos không thấy `Xiaozhi-Nav` | Bật Bluetooth + quyền vị trí cho Chronos; RESET mạch rồi tìm lại |
-| Thời tiết không hiện | Key OpenWeatherMap dùng chung có thể hết lượt — thay key riêng |
+| Thời tiết không hiện | Chờ ~1 phút sau khi có mạng; kiểm tra mạng ra được Internet |
+| Không báo chuyển khoản | Kiểm tra Chronos đang kết nối và đã chọn app ngân hàng để chuyển thông báo |
+| Báo thức không kêu | Mạch phải có giờ chuẩn (đã kết nối mạng); hỏi *"Mình có báo thức nào?"* để kiểm tra |
 
 Nếu vẫn lỗi, mở **Issues** của repo và đính kèm log (trang nạp có khung Log, hoặc chạy
 `idf.py monitor`).
 
-## 12. Dành cho người phát triển
+## 15. Dành cho người phát triển
 
 ### Build tự động (GitHub Actions)
 
@@ -229,7 +302,12 @@ Thay `SOPHIA_TTS` bằng mô hình khác, ví dụ `ALEXA`, `JARVIS_TTS`, `HIESP
 | `main/boards/xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8/config.h` | Chân GPIO, xoay màn hình (`LCD_ROTATION_DEGREE`) |
 | `main/boards/xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8/config.json` | Các bản build và tuỳ chọn sdkconfig |
 | `main/features/navigation/` | Bluetooth (Chronos) + giao diện dẫn đường |
-| `main/features/weather/weather_config.h` | Key OpenWeatherMap |
+| `main/features/weather/` | Thời tiết Open-Meteo + AQI, giao diện màn hình chờ |
+| `main/features/lunar/` | Âm lịch, can chi, giờ hoàng đạo |
+| `main/features/vietqr/` | Tạo mã VietQR + lệnh giọng nói |
+| `main/features/alarm_clock/` | Báo thức, hẹn giờ, chế độ ban đêm |
+| `main/features/bank_alert/` | Đọc thông báo ngân hàng, báo chuyển khoản |
+| `partitions/v2/16m_single_app.csv` | Bảng phân vùng: 1 khe app 8MB + 8MB assets |
 | `web/` | Trang nạp firmware |
 
 > **Không** đưa mật khẩu Wi-Fi hay API key riêng lên repo công khai.
@@ -245,7 +323,7 @@ Thay `SOPHIA_TTS` bằng mô hình khác, ví dụ `ALEXA`, `JARVIS_TTS`, `HIESP
 | Thẻ nhớ SDMMC 4-bit | CLK 38, CMD 40, D0 39, D1 41, D2 48, D3 47 |
 | Nút BOOT | GPIO 0 |
 
-## 13. Nguồn gốc & giấy phép
+## 16. Nguồn gốc & giấy phép
 
 - Dựa trên [Ngthhoang/xiaozhi-vn-ricky0611](https://github.com/Ngthhoang/xiaozhi-vn-ricky0611)
   (commit `0a79f26`), vốn là bản fork của [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32).

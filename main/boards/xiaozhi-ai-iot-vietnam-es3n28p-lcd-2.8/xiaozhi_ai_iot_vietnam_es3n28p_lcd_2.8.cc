@@ -35,6 +35,7 @@
 #ifdef CONFIG_PHONE_NAVIGATION_ENABLE
 #include "features/navigation/phone_nav_ble.h"
 #include "features/navigation/nav_ui.h"
+#include "features/bank_alert/bank_alert.h"
 #endif
 #ifdef CONFIG_SD_CARD_MMC_INTERFACE
 #include "sdmmc.h"
@@ -487,6 +488,9 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
 #ifdef CONFIG_PHONE_NAVIGATION_ENABLE
   // Turn-by-turn navigation forwarded from the phone (Chronos app, BLE)
   void InitializePhoneNavigation() {
+    // Bank transfer alerts: Chronos also forwards phone notifications
+    PhoneNavBle::GetInstance().SetNotificationCallback(
+        [](int /*icon*/, const std::string& text) { bank::OnNotification(text); });
     PhoneNavBle::GetInstance().Start(CONFIG_PHONE_NAVIGATION_BLE_NAME,
         [this](PhoneNavBle::Event event, const PhoneNavState& state) {
           if (power_save_timer_ != nullptr && state.active) {

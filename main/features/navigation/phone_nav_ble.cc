@@ -344,6 +344,15 @@ void PhoneNavBle::DataReceived() {
                 return;
             }
             break;
+        case 0x72:  // phone notification: [6]=icon, [7]=state (2 = new), [8..]=text
+            if (len > 8 && d[7] == 0x02 && d[6] != 0x01 && d[6] != 0x02) {
+                int icon = d[6];
+                std::string text((const char*)d + 8, len - 8);
+                lock.unlock();
+                if (notification_cb_) notification_cb_(icon, text);
+                return;
+            }
+            break;
         case 0xCC:  // chunked transfer setting
             if (d[3] == 0xFE) {
                 chunked_ = d[5] != 0x00;
