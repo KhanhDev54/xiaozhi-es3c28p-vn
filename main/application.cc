@@ -33,6 +33,8 @@
 #include <font_awesome.h>
 #include "features/weather/weather_ui.h"
 #include "features/lunar/lunar_calendar.h"
+#include "features/vietqr/vietqr_tools.h"
+#include "features/alarm_clock/alarm_manager.h"
 #include "ml307_board.h"
 #define TAG "Application"
 
@@ -431,6 +433,10 @@ void Application::Start() {
     McpFeatureTools::RegisterIp2QrCodeTool([display](bool active) {
         display->SetMediaOverlayActive(active);
     });
+
+    // VietQR (QR nhận tiền) + báo thức / hẹn giờ / chế độ ban đêm
+    vietqr::RegisterTools();
+    AlarmManager::GetInstance().Start();
 
     // Initialize media components and register their MCP tools
     InitMusic();
