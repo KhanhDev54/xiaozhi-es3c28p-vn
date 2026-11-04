@@ -1,0 +1,49 @@
+#ifndef _BOARD_CONFIG_H_
+#define _BOARD_CONFIG_H_
+
+#include <driver/gpio.h>
+
+/** XH-S3E-AI_V1.0 (Ricky War Tank): OLED 0.96" I2C + 2 motor N20 qua L298. */
+
+#define POWER_CHARGE_DETECT_PIN GPIO_NUM_21
+#define POWER_ADC_UNIT ADC_UNIT_2
+#define POWER_ADC_CHANNEL ADC_CHANNEL_3
+
+/** Motor A (trái) — L298 IN1/IN2 */
+#define MOTOR_A_IN1_GPIO GPIO_NUM_39  // VOL- (nút − trên PCB)
+#define MOTOR_A_IN2_GPIO GPIO_NUM_40  // VOL+ (nút + trên PCB)
+
+/** Motor B (phải) — L298 IN3/IN4 */
+#define MOTOR_B_IN1_GPIO GPIO_NUM_43  // TXD — CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#define MOTOR_B_IN2_GPIO GPIO_NUM_44  // RXD
+
+#define AUDIO_INPUT_SAMPLE_RATE 16000
+#define AUDIO_OUTPUT_SAMPLE_RATE 24000
+#define AUDIO_I2S_METHOD_SIMPLEX
+
+#define AUDIO_I2S_MIC_GPIO_WS GPIO_NUM_4
+#define AUDIO_I2S_MIC_GPIO_SCK GPIO_NUM_5
+#define AUDIO_I2S_MIC_GPIO_DIN GPIO_NUM_6
+#define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7
+#define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15
+#define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16
+
+#define DISPLAY_SDA_PIN GPIO_NUM_41
+#define DISPLAY_SCL_PIN GPIO_NUM_42
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+#define DISPLAY_MIRROR_X true
+#define DISPLAY_MIRROR_Y true
+
+#define BOOT_BUTTON_GPIO GPIO_NUM_0
+
+/** Dưới ngưỡng này coi như 0 (motor N20 yếu/không quay ổn). */
+#define TANK_SPEED_MIN_EFFECTIVE 30
+#define TANK_SPEED_DEFAULT 60
+
+/** HTTP web control port (no WebSocket). Avoid 8080 if leftover clients spam it. */
+#define TANK_WEB_CONTROL_PORT 8081
+
+#define RICKY_WAR_TANK_VERSION "1.0.0"
+
+#endif  // _BOARD_CONFIG_H_

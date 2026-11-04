@@ -1,0 +1,3 @@
+# Ricky Hunonic Robot (XH-S3E-AI): log qua USB, GPIO 43/44 cho motor phai
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set

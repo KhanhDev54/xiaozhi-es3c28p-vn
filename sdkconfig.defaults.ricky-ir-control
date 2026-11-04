@@ -1,0 +1,6 @@
+# Ricky IR Control (XH-S3E-AI): log qua USB Serial/JTAG de giai phong UART0 (GPIO 43/44) cho IR TX
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+
+# Robot IR mac dinh khi NVS chua luu lua chon nao
+CONFIG_IR_ROBOT_DEFAULT_R839=y

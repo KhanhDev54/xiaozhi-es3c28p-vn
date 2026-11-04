@@ -1,0 +1,13 @@
+# Ricky S3 Mini (XH-S3E-AI_V1): ban co ban — OLED mat nhay + nhac online/radio.
+# Log qua USB Serial/JTAG de dung chung cong USB voi luc nap firmware.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+
+# Tu danh thuc: "Hi,Lily" (chi mot model de khong lan)
+CONFIG_SR_WN_WN9_HILILI_TTS=y
+# CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS is not set
+# CONFIG_SR_WN_WN9_HIANDY_TTS2 is not set
