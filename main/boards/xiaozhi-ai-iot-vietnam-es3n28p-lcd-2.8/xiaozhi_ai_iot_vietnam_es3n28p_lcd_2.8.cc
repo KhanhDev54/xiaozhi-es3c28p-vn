@@ -32,6 +32,10 @@
 #include "assets/lang_config.h"
 #include "power_manager.h"
 #include "esp_lcd_ili9341.h"
+#ifdef CONFIG_PHONE_NAVIGATION_ENABLE
+#include "features/navigation/phone_nav_ble.h"
+#include "features/navigation/nav_ui.h"
+#endif
 #ifdef CONFIG_SD_CARD_MMC_INTERFACE
 #include "sdmmc.h"
 #elif defined(CONFIG_SD_CARD_SPI_INTERFACE)
@@ -480,6 +484,36 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
     static LampController lamp(BUILTIN_LED_GPIO);
   }
 
+#ifdef CONFIG_PHONE_NAVIGATION_ENABLE
+  // Turn-by-turn navigation forwarded from the phone (Chronos app, BLE)
+  void InitializePhoneNavigation() {
+    PhoneNavBle::GetInstance().Start(CONFIG_PHONE_NAVIGATION_BLE_NAME,
+        [this](PhoneNavBle::Event event, const PhoneNavState& state) {
+          if (power_save_timer_ != nullptr && state.active) {
+            power_save_timer_->WakeUp();
+          }
+          {
+            DisplayLockGuard lock(display_);
+            NavUI::GetInstance().Update(display_, state,
+                                        event == PhoneNavBle::Event::kNavIcon);
+          }
+          if (event == PhoneNavBle::Event::kConnection) {
+            display_->ShowNotification(state.connected ? "Đã kết nối điện thoại"
+                                                       : "Mất kết nối điện thoại");
+          }
+          // Short beep when the next instruction changes
+          static std::string last_directions;
+          if (event == PhoneNavBle::Event::kNavData && state.active &&
+              state.is_navigation && state.directions != last_directions) {
+            last_directions = state.directions;
+            Application::GetInstance().Schedule([]() {
+              Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
+            });
+          }
+        });
+  }
+#endif
+
  public:
   XiaozhiAIIoTEs3n28p(): boot_button_(BOOT_BUTTON_GPIO)
   {
@@ -493,6 +527,9 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
 #endif
     InitializeButtons();
     InitializeTools();
+#ifdef CONFIG_PHONE_NAVIGATION_ENABLE
+    InitializePhoneNavigation();
+#endif
     if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
       GetBacklight()->RestoreBrightness();
     }

@@ -613,6 +613,19 @@ choice SD_CARD_INTERFACE_TYPE
         bool "SPI Interface"
 endchoice
 
+config PHONE_NAVIGATION_ENABLE
+    bool "Enable phone navigation over BLE (Chronos app)"
+    depends on BT_ENABLED && BT_NIMBLE_ENABLED
+    default n
+    help
+        Show turn-by-turn navigation forwarded from the phone
+        (Google Maps / OsmAnd via the Chronos Android app) on the LCD.
+
+config PHONE_NAVIGATION_BLE_NAME
+    string "BLE device name for phone navigation"
+    depends on PHONE_NAVIGATION_ENABLE
+    default "Xiaozhi-Nav"
+
 config WEATHER_IDLE_DISPLAY_ENABLE
     bool "Enable Weather Feature (Idle Display for LCD)"
     default n

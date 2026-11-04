@@ -27,6 +27,8 @@ set(SOURCES "audio/audio_codec.cc"
             "led/gpio_led.cc"
             "features/weather/weather_service.cc"
             "features/weather/weather_ui.cc"
+            "features/navigation/phone_nav_ble.cc"
+            "features/navigation/nav_ui.cc"
             "display/display.cc"
             "display/lcd_touch.cc"
             "display/lcd_display.cc"
@@ -56,7 +58,7 @@ set(SOURCES "audio/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols" "features/music" "features/video" "features/mp4" "features/weather" "features/spectrum" "features/QRCode")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols" "features/music" "features/video" "features/mp4" "features/weather" "features/navigation" "features/spectrum" "features/QRCode")
 
 # Add board common files
 file(GLOB BOARD_COMMON_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/common/*.cc)
