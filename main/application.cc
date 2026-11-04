@@ -37,6 +37,12 @@
 #include "features/alarm_clock/alarm_manager.h"
 #include "features/bank_alert/bank_alert.h"
 #include "ml307_board.h"
+#include <esp_app_desc.h>
+
+// Name shown on screen at boot and after activation ("KenDev v2.5.3").
+#ifndef DEVICE_BRAND_NAME
+#define DEVICE_BRAND_NAME "KenDev"
+#endif
 #define TAG "Application"
 
 
@@ -379,7 +385,11 @@ void Application::Start() {
     auto display = board.GetDisplay();
 
     // Print board name/version info
-    display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
+    {
+        // Boot signature (personal build)
+        std::string signature = std::string(DEVICE_BRAND_NAME) + " · v" + esp_app_get_description()->version;
+        display->SetChatMessage("system", signature.c_str());
+    }
 
 #if (0) // Test QR code display
     qrcode::QRCodeDisplay::GetInstance().Show("http://192.168.1.100/ota", "192.168.1.100/ota");

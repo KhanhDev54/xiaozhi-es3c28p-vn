@@ -80,20 +80,49 @@ function refreshButtons() {
 }
 
 // ---------- firmware list ----------
+// Both repos publish to https://<user>.github.io/<repo>/ (same origin), so this page can
+// list the firmware of every board. Own repo first, then the others.
+const SOURCES = [
+  { repo: "xiaozhi-es3c28p-vn", board: "ESP32-S3 2.8\" cảm ứng (ES3C28P, 16MB)" },
+  { repo: "xiaozhi-s3zero-oled-vn", board: "ESP32-S3 Zero + OLED 0.96\" (4MB)" },
+];
+
+function sourceBase(repo) {
+  const parts = location.pathname.split("/").filter(Boolean);
+  const own = parts.length ? parts[0] : "";
+  return own === repo ? "" : `../${repo}/`;
+}
+
+async function fetchSource(src) {
+  const base = sourceBase(src.repo);
+  const res = await fetch(base + "firmware.json", { cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  const list = Array.isArray(data.firmwares) ? data.firmwares : [];
+  return list.map((fw) => ({ ...fw, file: base + fw.file, board: fw.board || src.board, own: base === "" }));
+}
+
 async function loadFirmwareList() {
-  try {
-    const res = await fetch("firmware.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    firmwares = Array.isArray(data.firmwares) ? data.firmwares : [];
-  } catch (e) {
-    firmwares = [];
-    log(`Không tải được danh sách firmware (${e.message}). Bạn vẫn có thể kéo thả file .bin.`);
-  }
+  const ordered = [...SOURCES].sort((a, b) => (sourceBase(a.repo) === "" ? -1 : 0) - (sourceBase(b.repo) === "" ? -1 : 0));
+  const results = await Promise.allSettled(ordered.map(fetchSource));
+  firmwares = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") firmwares.push(...r.value);
+    else log(`Chưa có firmware cho ${ordered[i].board} (${r.reason && r.reason.message}).`);
+  });
+
   els.fwSelect.innerHTML = "";
-  const placeholder = new Option(firmwares.length ? "-- Chọn firmware --" : "Chưa có firmware trong danh sách", "");
-  els.fwSelect.add(placeholder);
-  firmwares.forEach((fw, i) => els.fwSelect.add(new Option(`${fw.name} — v${fw.version}`, String(i))));
+  els.fwSelect.add(new Option(firmwares.length ? "-- Chọn firmware --" : "Chưa có firmware trong danh sách", ""));
+  const groups = new Map();
+  firmwares.forEach((fw, i) => {
+    if (!groups.has(fw.board)) {
+      const g = document.createElement("optgroup");
+      g.label = fw.board;
+      groups.set(fw.board, g);
+      els.fwSelect.appendChild(g);
+    }
+    groups.get(fw.board).appendChild(new Option(`${fw.name} — v${fw.version}`, String(i)));
+  });
   if (firmwares.length) log(`Đã tải ${firmwares.length} firmware từ danh sách.`);
 }
 
@@ -102,7 +131,7 @@ async function selectFirmware(index) {
   if (!fw) { image = null; els.fwInfo.hidden = true; refreshButtons(); return; }
   els.fwInfo.hidden = false;
   els.fwInfo.innerHTML =
-    `<b>${fw.name}</b><br>Phiên bản: <b>${fw.version}</b> · Build: ${fw.date || "?"} · Commit: ${(fw.commit || "").slice(0, 7)}` +
+    `<b>${fw.name}</b><br>Mạch: ${fw.board}<br>Phiên bản: <b>${fw.version}</b> · Build: ${fw.date || "?"} · Commit: ${(fw.commit || "").slice(0, 7)}` +
     (fw.notes ? `<br>${fw.notes}` : "");
   els.address.value = "0x" + Number(fw.address || 0).toString(16);
   busy = true; refreshButtons();
@@ -111,7 +140,7 @@ async function selectFirmware(index) {
     const res = await fetch(fw.file, { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const bytes = new Uint8Array(await res.arrayBuffer());
-    image = { name: fw.file, bytes };
+    image = { name: fw.file, bytes, flashMb: fw.flash_mb || 0 };
     els.drop.classList.remove("has-file");
     els.dropText.innerHTML = "Kéo thả file <b>.bin</b> vào đây hoặc <u>chọn file</u>";
     log(`✅ Đã tải ${fw.file} (${fmtSize(bytes.length)}).`);
@@ -188,6 +217,18 @@ async function flash() {
   setProgress(0);
   const started = performance.now();
   try {
+    if (image.flashMb) {
+      try {
+        const kb = await loader.getFlashSize();
+        if (kb && kb < image.flashMb * 1024) {
+          const ok = confirm(`Mạch này có ${kb / 1024}MB flash nhưng firmware cần ${image.flashMb}MB.\n` +
+                             "Nạp nhầm firmware sẽ không chạy. Vẫn tiếp tục?");
+          if (!ok) { log("Đã huỷ: firmware không hợp với dung lượng flash của mạch."); return; }
+        } else if (kb) {
+          log(`Flash của mạch: ${kb / 1024}MB ✓`);
+        }
+      } catch (_) { /* ignore: older chips may not report size */ }
+    }
     log(`Bắt đầu nạp ${image.name} (${fmtSize(image.bytes.length)}) tại 0x${address.toString(16)}…`);
     await loader.writeFlash({
       fileArray: [{ data: toBinaryString(image.bytes), address }],
