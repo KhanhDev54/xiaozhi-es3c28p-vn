@@ -95,6 +95,8 @@ jobs:
                 "commit": "${GITHUB_SHA}",
                 "date": "${DATE}",
                 "size": ${SIZE},
+                "flash_mb": 16,
+                "board": "ESP32-S3 2.8\" cảm ứng (ES3C28P, 16MB)",
                 "notes": "ES3C28P/ES3N28P 16MB · tiếng Việt · nhạc · thời tiết · dẫn đường (Chronos)"
               }
             ]
