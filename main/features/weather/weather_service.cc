@@ -2,11 +2,8 @@
 #include "settings.h"
 #include "wifi_station.h"
 #include "board.h"
-#include "features/weather/weather_ui.h" 
 
 #include <esp_log.h>
-#include <esp_http_client.h>
-#include <esp_crt_bundle.h>
 #include <cJSON.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -14,13 +11,13 @@
 #include <iomanip>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 
 #define TAG "WeatherService"
 
-WeatherService::WeatherService() 
-    : api_key_(OPEN_WEATHERMAP_API_KEY_DEFAULT)
-    , last_update_time_(0) {
+WeatherService::WeatherService() : last_update_time_(0) {
     weather_info_.valid = false;
 }
 
@@ -33,97 +30,256 @@ std::string WeatherService::UrlEncode(const std::string& value) {
     std::ostringstream escaped;
     escaped.fill('0');
     escaped << std::hex;
-
-    for (std::string::const_iterator i = value.begin(), n = value.end(); i != n; ++i) {
-        std::string::value_type c = (*i);
-        
-        // Keep alphanumeric and other accepted characters intact
+    for (char c : value) {
         if (isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.' || c == '~') {
             escaped << c;
             continue;
         }
-        
-        // Any other characters are percent-encoded
-        escaped << std::uppercase;
-        escaped << '%' << std::setw(2) << int((unsigned char)c);
-        escaped << std::nouppercase;
+        escaped << std::uppercase << '%' << std::setw(2) << int((unsigned char)c) << std::nouppercase;
     }
-
     return escaped.str();
 }
 
-std::string WeatherService::CapitalizeWords(std::string str) {
-    bool newWord = true;
-    for (size_t i = 0; i < str.length(); ++i) {
-        if (std::isspace(str[i])) {
-            newWord = true;
-        } else if (newWord) {
-            str[i] = std::toupper(str[i]);
-            newWord = false;
-        }
-    }
-    return str;
+std::string WeatherService::DayNameFromDate(const std::string& ymd) {
+    // ymd = "2026-11-04"
+    int y = 0, m = 0, d = 0;
+    if (sscanf(ymd.c_str(), "%d-%d-%d", &y, &m, &d) != 3) return "";
+    struct tm t = {};
+    t.tm_year = y - 1900;
+    t.tm_mon = m - 1;
+    t.tm_mday = d;
+    t.tm_hour = 12;
+    mktime(&t);
+    static const char* wdays[] = {"CN", "T2", "T3", "T4", "T5", "T6", "T7"};
+    return wdays[t.tm_wday % 7];
 }
 
-std::string WeatherService::GetDayNameFromTime(time_t timestamp) {
-    struct tm* timeinfo = localtime(&timestamp);
-    const char* wdays[] = {"CN", "T2", "T3", "T4", "T5", "T6", "T7"};
-    return std::string(wdays[timeinfo->tm_wday]);
+// WMO weather code -> OpenWeatherMap-style icon code (used by WeatherUI::GetWeatherIcon)
+const char* WeatherService::WmoToIconCode(int wmo, bool is_day) {
+    const char* base;
+    if (wmo == 0) base = "01";
+    else if (wmo == 1) base = "02";
+    else if (wmo == 2) base = "03";
+    else if (wmo == 3) base = "04";
+    else if (wmo == 45 || wmo == 48) base = "50";
+    else if (wmo >= 51 && wmo <= 57) base = "09";
+    else if (wmo >= 61 && wmo <= 67) base = "10";
+    else if (wmo >= 71 && wmo <= 77) base = "13";
+    else if (wmo >= 80 && wmo <= 82) base = "09";
+    else if (wmo == 85 || wmo == 86) base = "13";
+    else if (wmo >= 95) base = "11";
+    else base = "03";
+    static char buf[4];
+    snprintf(buf, sizeof(buf), "%s%c", base, is_day ? 'd' : 'n');
+    return buf;
 }
 
-std::string WeatherService::GetCityFromIP() {
-    std::string detected_city = "";
-    
-    // Check WiFi connection
-    if (!WifiStation::GetInstance().IsConnected()) {
-        ESP_LOGE(TAG, "GetCityFromIP: No WiFi connection");
-        return "";
+const char* WeatherService::WmoToVietnamese(int wmo) {
+    switch (wmo) {
+        case 0: return "Trời quang";
+        case 1: return "Ít mây";
+        case 2: return "Có mây";
+        case 3: return "Nhiều mây";
+        case 45: case 48: return "Sương mù";
+        case 51: case 53: case 55: return "Mưa phùn";
+        case 56: case 57: return "Mưa phùn lạnh";
+        case 61: return "Mưa nhỏ";
+        case 63: return "Mưa vừa";
+        case 65: return "Mưa to";
+        case 66: case 67: return "Mưa lạnh";
+        case 71: case 73: case 75: case 77: return "Tuyết";
+        case 80: return "Mưa rào nhẹ";
+        case 81: return "Mưa rào";
+        case 82: return "Mưa rào to";
+        case 85: case 86: return "Mưa tuyết";
+        case 95: return "Dông";
+        case 96: case 99: return "Dông, mưa đá";
+        default: return "Có mây";
     }
+}
 
-    auto& board = Board::GetInstance();
-    auto network = board.GetNetwork();
+const char* WeatherService::AqiLevel(int aqi) {
+    if (aqi < 0) return "";
+    if (aqi <= 50) return "Tốt";
+    if (aqi <= 100) return "Trung bình";
+    if (aqi <= 150) return "Kém";
+    if (aqi <= 200) return "Xấu";
+    if (aqi <= 300) return "Rất xấu";
+    return "Nguy hại";
+}
+
+uint32_t WeatherService::AqiColor(int aqi) {
+    if (aqi < 0) return 0xAAAAAA;
+    if (aqi <= 50) return 0x22C55E;
+    if (aqi <= 100) return 0xEAB308;
+    if (aqi <= 150) return 0xF97316;
+    if (aqi <= 200) return 0xEF4444;
+    if (aqi <= 300) return 0xA855F7;
+    return 0x9F1239;
+}
+
+std::string WeatherService::HttpGet(const std::string& url) {
+    auto network = Board::GetInstance().GetNetwork();
     auto http = network->CreateHttp(WEATHER_HTTP_TIMEOUT_MS);
-    
-    http->SetHeader("Content-Type", "application/json");
-    
-    if (!http->Open("GET", IP_LOCATION_API_ENDPOINT)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection for IP detection");
+    if (!http->Open("GET", url)) {
+        ESP_LOGE(TAG, "HTTP open failed: %s", url.c_str());
         return "";
     }
-
-    int status_code = http->GetStatusCode();
-    ESP_LOGI(TAG, "IP-Who-Is Status: %d", status_code);
-
-    if (status_code == 200) {
-        std::string body = http->ReadAll();
-        
-        ESP_LOGI(TAG, "IP-Who-Is Response: %s", body.c_str());
-
-        if (!body.empty()) {
-            cJSON* root = cJSON_Parse(body.c_str());
-            if (root) {
-                cJSON* success = cJSON_GetObjectItem(root, "success");
-                
-                if (cJSON_IsBool(success) && cJSON_IsTrue(success)) {
-                    cJSON* city_json = cJSON_GetObjectItem(root, "region");
-                    if (cJSON_IsString(city_json)) {
-                        detected_city = city_json->valuestring;
-                        ESP_LOGI(TAG, "Auto-detected Region success: %s", detected_city.c_str());
-                    }
-                } else {
-                    ESP_LOGW(TAG, "IP-Who-Is returned success=false");
-                }
-                cJSON_Delete(root);
-            } else {
-                ESP_LOGE(TAG, "Failed to parse JSON");
-            }
-        }
+    int status = http->GetStatusCode();
+    std::string body;
+    if (status == 200) {
+        body = http->ReadAll();
     } else {
-        ESP_LOGW(TAG, "HTTP Error: %d", status_code);
+        ESP_LOGW(TAG, "HTTP %d: %s", status, url.c_str());
     }
-    
     http->Close();
-    return detected_city;
+    return body;
+}
+
+WeatherService::Location WeatherService::LocationFromIP() {
+    Location loc;
+    std::string body = HttpGet(IP_LOCATION_API_ENDPOINT);
+    if (body.empty()) return loc;
+    cJSON* root = cJSON_Parse(body.c_str());
+    if (!root) return loc;
+    cJSON* success = cJSON_GetObjectItem(root, "success");
+    cJSON* lat = cJSON_GetObjectItem(root, "latitude");
+    cJSON* lon = cJSON_GetObjectItem(root, "longitude");
+    cJSON* city = cJSON_GetObjectItem(root, "city");
+    cJSON* region = cJSON_GetObjectItem(root, "region");
+    if (cJSON_IsTrue(success) && cJSON_IsNumber(lat) && cJSON_IsNumber(lon)) {
+        loc.lat = (float)lat->valuedouble;
+        loc.lon = (float)lon->valuedouble;
+        if (cJSON_IsString(city) && city->valuestring[0]) {
+            loc.name = city->valuestring;
+        } else if (cJSON_IsString(region)) {
+            loc.name = region->valuestring;
+        }
+        loc.valid = true;
+        ESP_LOGI(TAG, "IP location: %s (%.4f, %.4f)", loc.name.c_str(), loc.lat, loc.lon);
+    }
+    cJSON_Delete(root);
+    return loc;
+}
+
+WeatherService::Location WeatherService::LocationFromName(const std::string& name) {
+    Location loc;
+    std::string url = std::string(OPEN_METEO_GEOCODING_ENDPOINT) + "?name=" + UrlEncode(name) +
+                      "&count=1&language=vi&format=json";
+    std::string body = HttpGet(url);
+    if (body.empty()) return loc;
+    cJSON* root = cJSON_Parse(body.c_str());
+    if (!root) return loc;
+    cJSON* results = cJSON_GetObjectItem(root, "results");
+    cJSON* first = cJSON_IsArray(results) ? cJSON_GetArrayItem(results, 0) : nullptr;
+    if (first) {
+        cJSON* lat = cJSON_GetObjectItem(first, "latitude");
+        cJSON* lon = cJSON_GetObjectItem(first, "longitude");
+        cJSON* nm = cJSON_GetObjectItem(first, "name");
+        if (cJSON_IsNumber(lat) && cJSON_IsNumber(lon)) {
+            loc.lat = (float)lat->valuedouble;
+            loc.lon = (float)lon->valuedouble;
+            loc.name = cJSON_IsString(nm) ? nm->valuestring : name;
+            loc.valid = true;
+            ESP_LOGI(TAG, "Geocoded '%s' -> %s (%.4f, %.4f)", name.c_str(), loc.name.c_str(), loc.lat, loc.lon);
+        }
+    }
+    cJSON_Delete(root);
+    return loc;
+}
+
+static double NumAt(cJSON* arr, int i) {
+    cJSON* v = cJSON_IsArray(arr) ? cJSON_GetArrayItem(arr, i) : nullptr;
+    return cJSON_IsNumber(v) ? v->valuedouble : NAN;
+}
+
+bool WeatherService::FetchForecast(const Location& loc) {
+    char url[512];
+    snprintf(url, sizeof(url),
+             "%s?latitude=%.4f&longitude=%.4f"
+             "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,"
+             "surface_pressure,wind_speed_10m"
+             "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+             "&timezone=auto&forecast_days=5&wind_speed_unit=ms",
+             OPEN_METEO_FORECAST_ENDPOINT, loc.lat, loc.lon);
+    std::string body = HttpGet(url);
+    if (body.empty()) return false;
+
+    cJSON* root = cJSON_Parse(body.c_str());
+    if (!root) {
+        ESP_LOGE(TAG, "Forecast JSON parse failed");
+        return false;
+    }
+    bool ok = false;
+    cJSON* cur = cJSON_GetObjectItem(root, "current");
+    cJSON* daily = cJSON_GetObjectItem(root, "daily");
+    if (cJSON_IsObject(cur)) {
+        cJSON* t = cJSON_GetObjectItem(cur, "temperature_2m");
+        cJSON* h = cJSON_GetObjectItem(cur, "relative_humidity_2m");
+        cJSON* fl = cJSON_GetObjectItem(cur, "apparent_temperature");
+        cJSON* day = cJSON_GetObjectItem(cur, "is_day");
+        cJSON* code = cJSON_GetObjectItem(cur, "weather_code");
+        cJSON* p = cJSON_GetObjectItem(cur, "surface_pressure");
+        cJSON* w = cJSON_GetObjectItem(cur, "wind_speed_10m");
+        if (cJSON_IsNumber(t) && cJSON_IsNumber(code)) {
+            bool is_day = !cJSON_IsNumber(day) || day->valueint == 1;
+            weather_info_.temp = (float)t->valuedouble;
+            weather_info_.humidity = cJSON_IsNumber(h) ? h->valueint : 0;
+            weather_info_.feels_like = cJSON_IsNumber(fl) ? (float)fl->valuedouble : weather_info_.temp;
+            weather_info_.pressure = cJSON_IsNumber(p) ? (int)lround(p->valuedouble) : 0;
+            weather_info_.wind_speed = cJSON_IsNumber(w) ? (float)w->valuedouble : 0;
+            weather_info_.icon_code = WmoToIconCode(code->valueint, is_day);
+            weather_info_.description = WmoToVietnamese(code->valueint);
+            weather_info_.city = loc.name;
+            weather_info_.latitude = loc.lat;
+            weather_info_.longitude = loc.lon;
+            ok = true;
+        }
+    }
+    if (ok && cJSON_IsObject(daily)) {
+        cJSON* times = cJSON_GetObjectItem(daily, "time");
+        cJSON* codes = cJSON_GetObjectItem(daily, "weather_code");
+        cJSON* tmax = cJSON_GetObjectItem(daily, "temperature_2m_max");
+        cJSON* tmin = cJSON_GetObjectItem(daily, "temperature_2m_min");
+        cJSON* rain = cJSON_GetObjectItem(daily, "precipitation_probability_max");
+        int n = cJSON_IsArray(times) ? cJSON_GetArraySize(times) : 0;
+        weather_info_.forecast.clear();
+        for (int i = 0; i < n; i++) {
+            double hi = NumAt(tmax, i), lo = NumAt(tmin, i), c = NumAt(codes, i), r = NumAt(rain, i);
+            if (i == 0) {
+                if (!std::isnan(hi)) weather_info_.temp_max = (float)hi;
+                if (!std::isnan(lo)) weather_info_.temp_min = (float)lo;
+                continue;  // today is shown in the main block
+            }
+            cJSON* tday = cJSON_GetArrayItem(times, i);
+            ForecastItem item;
+            item.day_name = cJSON_IsString(tday) ? DayNameFromDate(tday->valuestring) : "";
+            item.icon_code = WmoToIconCode(std::isnan(c) ? 3 : (int)c, true);
+            item.temp = std::isnan(hi) ? 0 : (float)hi;
+            item.temp_min = std::isnan(lo) ? 0 : (float)lo;
+            item.rain_prob = std::isnan(r) ? 0 : (int)r;
+            weather_info_.forecast.push_back(item);
+        }
+    }
+    cJSON_Delete(root);
+    return ok;
+}
+
+void WeatherService::FetchAirQuality(const Location& loc) {
+    char url[256];
+    snprintf(url, sizeof(url), "%s?latitude=%.4f&longitude=%.4f&current=us_aqi,pm2_5&timezone=auto",
+             OPEN_METEO_AIR_ENDPOINT, loc.lat, loc.lon);
+    std::string body = HttpGet(url);
+    if (body.empty()) return;
+    cJSON* root = cJSON_Parse(body.c_str());
+    if (!root) return;
+    cJSON* cur = cJSON_GetObjectItem(root, "current");
+    cJSON* aqi = cJSON_IsObject(cur) ? cJSON_GetObjectItem(cur, "us_aqi") : nullptr;
+    if (cJSON_IsNumber(aqi)) {
+        weather_info_.aqi = (int)lround(aqi->valuedouble);
+        ESP_LOGI(TAG, "AQI: %d (%s)", weather_info_.aqi, AqiLevel(weather_info_.aqi));
+    }
+    cJSON_Delete(root);
 }
 
 bool WeatherService::FetchWeatherData() {
@@ -131,241 +287,43 @@ bool WeatherService::FetchWeatherData() {
     ESP_LOGW(TAG, "Weather feature is disabled");
     return false;
 #endif
-
-    // Wait for WiFi connection
     int wait_retries = 0;
     while (!WifiStation::GetInstance().IsConnected() && wait_retries < 20) {
-        ESP_LOGI(TAG, "Waiting for WiFi before fetching weather...");
         vTaskDelay(pdMS_TO_TICKS(1000));
         wait_retries++;
     }
-
     if (!WifiStation::GetInstance().IsConnected()) {
         ESP_LOGE(TAG, "WiFi not connected, skipping weather update.");
         return false;
     }
 
-    // Get configuration
-    Settings weather_settings("wifi", false);
-    std::string city = city_.empty() ? weather_settings.GetString("weather_city", "") : city_;
-    std::string api_key = api_key_.empty() ? weather_settings.GetString("weather_api_key", "") : api_key_;
-
-    if (api_key.empty()) {
-        api_key = OPEN_WEATHERMAP_API_KEY_DEFAULT;
-    }
-    
-    // Auto-detect city if not set
-    if (city.empty() || city == "auto") {
-        ESP_LOGW(TAG, "City not set or 'auto', detecting via IP...");
-        
-        for (int i = 0; i < 2; i++) {
-            std::string auto_city = GetCityFromIP();
-            if (!auto_city.empty()) {
-                city = auto_city;
-                break;
-            }
-            vTaskDelay(pdMS_TO_TICKS(1000));
+    // Resolve location once (configured city name, else IP), then reuse it
+    if (!cached_location_.valid) {
+        Settings weather_settings("wifi", false);
+        std::string city = city_.empty() ? weather_settings.GetString("weather_city", "") : city_;
+        if (!city.empty() && city != "auto") {
+            cached_location_ = LocationFromName(city);
         }
-
-        if (city.empty() || city == "auto") {
-            ESP_LOGW(TAG, "Failed to detect IP location, fallback to Hanoi");
-            city = CITY_LOCATION_DEFAULT;
+        for (int i = 0; i < 2 && !cached_location_.valid; i++) {
+            cached_location_ = LocationFromIP();
+            if (!cached_location_.valid) vTaskDelay(pdMS_TO_TICKS(1000));
         }
-    } else {
-        ESP_LOGW(TAG, "Using configured city: %s", city.c_str());
+        if (!cached_location_.valid) {
+            ESP_LOGW(TAG, "Location unknown, fallback to %s", CITY_LOCATION_DEFAULT);
+            cached_location_.name = "Hà Nội";
+            cached_location_.lat = CITY_LAT_DEFAULT;
+            cached_location_.lon = CITY_LON_DEFAULT;
+            cached_location_.valid = true;
+        }
     }
 
-    // Fetch current weather and forecast data
-    if (!FetchCurrentWeatherData(city, api_key)) {
+    if (!FetchForecast(cached_location_)) {
         return false;
     }
-
-    FetchForecastData(city, api_key);
+    FetchAirQuality(cached_location_);
+    weather_info_.valid = true;
+    last_update_time_ = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    ESP_LOGI(TAG, "Weather updated: %s %.1fC %s", weather_info_.city.c_str(), weather_info_.temp,
+             weather_info_.description.c_str());
     return true;
-}
-
-bool WeatherService::FetchCurrentWeatherData(const std::string& city, const std::string& api_key) {
-    std::string url = std::string(WEATHER_API_ENDPOINT) + "weather?q=" + UrlEncode(city) +
-                      "&appid=" + api_key + "&units=metric&lang=vi";
-
-    ESP_LOGI(TAG, "Fetching current weather from: %s", url.c_str());
-
-    auto& board = Board::GetInstance();
-    auto network = board.GetNetwork();
-    auto http = network->CreateHttp(WEATHER_HTTP_TIMEOUT_MS);
-    
-    http->SetHeader("Content-Type", "application/json");
-    
-    if (!http->Open("GET", url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection for current weather");
-        return false;
-    }
-
-    int status_code = http->GetStatusCode();
-    if (status_code != 200) {
-        ESP_LOGE(TAG, "Current weather HTTP request failed with status: %d", status_code);
-        http->Close();
-        return false;
-    }
-    
-    std::string body = http->ReadAll();
-    http->Close();
-
-    cJSON* root = cJSON_Parse(body.c_str());
-    if (root == nullptr) {
-        ESP_LOGE(TAG, "Failed to parse current weather JSON");
-        return false;
-    }
-
-    bool success = false;
-    do {
-        cJSON* name = cJSON_GetObjectItem(root, "name");
-        cJSON* main_obj = cJSON_GetObjectItem(root, "main");
-        cJSON* weather_arr = cJSON_GetObjectItem(root, "weather");
-
-        if (!cJSON_IsString(name) || !cJSON_IsObject(main_obj) || 
-            !cJSON_IsArray(weather_arr) || cJSON_GetArraySize(weather_arr) == 0) {
-            break;
-        }
-
-        cJSON* temp = cJSON_GetObjectItem(main_obj, "temp");
-        cJSON* humidity = cJSON_GetObjectItem(main_obj, "humidity");
-        cJSON* feels_like = cJSON_GetObjectItem(main_obj, "feels_like");
-        cJSON* pressure = cJSON_GetObjectItem(main_obj, "pressure");
-        cJSON* wind_obj = cJSON_GetObjectItem(root, "wind");
-        cJSON* wind_speed = cJSON_IsObject(wind_obj) ? cJSON_GetObjectItem(wind_obj, "speed") : nullptr;
-        cJSON* w0 = cJSON_GetArrayItem(weather_arr, 0);
-        cJSON* icon = cJSON_GetObjectItem(w0, "icon");
-        cJSON* desc = cJSON_GetObjectItem(w0, "description");
-
-        weather_info_.city = name->valuestring;
-        if (cJSON_IsNumber(temp)) weather_info_.temp = (float)temp->valuedouble;
-        if (cJSON_IsNumber(humidity)) weather_info_.humidity = humidity->valueint;
-        if (cJSON_IsNumber(feels_like)) weather_info_.feels_like = (float)feels_like->valuedouble;
-        if (cJSON_IsNumber(pressure)) weather_info_.pressure = pressure->valueint;
-        if (cJSON_IsNumber(wind_speed)) weather_info_.wind_speed = (float)wind_speed->valuedouble;
-        if (cJSON_IsString(icon)) weather_info_.icon_code = icon->valuestring;
-        if (cJSON_IsString(desc)) weather_info_.description = CapitalizeWords(desc->valuestring);
-        
-        weather_info_.valid = true;
-        success = true;
-        last_update_time_ = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        ESP_LOGI(TAG, "Current Weather Updated: %s, %.1f C", weather_info_.city.c_str(), weather_info_.temp);
-
-    } while (0);
-
-    cJSON_Delete(root);
-
-    if (!success) {
-        ESP_LOGE(TAG, "Failed to extract current weather data from JSON");
-    }
-
-    return success;
-}
-
-bool WeatherService::FetchForecastData(const std::string& city, const std::string& api_key) {    
-    std::string url_forecast = std::string(WEATHER_API_ENDPOINT) + "forecast?q=" + UrlEncode(city) +
-                                "&appid=" + api_key + "&units=metric&cnt=40";
-    ESP_LOGI(TAG, "Fetching forecast from: %s", url_forecast.c_str());
-
-    auto& board = Board::GetInstance();
-    auto network = board.GetNetwork();
-    auto http = network->CreateHttp(WEATHER_HTTP_TIMEOUT_MS);
-    
-    http->SetHeader("Content-Type", "application/json");
-    
-    if (!http->Open("GET", url_forecast)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection for forecast");
-        return false;
-    }
-
-    int status_code = http->GetStatusCode();
-    if (status_code != 200) {
-        ESP_LOGE(TAG, "Forecast HTTP request failed with status: %d", status_code);
-        http->Close();
-        return false;
-    }
-
-    size_t length = http->GetBodyLength();
-    ESP_LOGI(TAG, "Forecast Content Length: %zu", length);
-    if (length == 0 || length > (20 * 1024)) {
-        http->Close();
-        ESP_LOGE(TAG, "Forecast response body is empty");
-        return false;
-    }
-
-    std::string body;
-    body.reserve(length);
-    if (body.capacity() < length) {
-        ESP_LOGE(TAG, "Failed to reserve memory for forecast body");
-        http->Close();
-        return false;
-    }
-
-    constexpr size_t CHUNK_BUFFER_SIZE = 1024;
-    char *buffer = (char*)malloc(CHUNK_BUFFER_SIZE);
-    if (buffer == nullptr) {
-        ESP_LOGE(TAG, "Failed to allocate memory for forecast buffer");
-        http->Close();
-        return false;
-    }
-
-    int read_len;
-    while ((read_len = http->Read(buffer, CHUNK_BUFFER_SIZE)) > 0) {
-        body.append(buffer, read_len);
-        ESP_LOGI(TAG, "Forecast Read %d bytes", read_len);
-    }
-    free(buffer);
-    http->Close();
-    ESP_LOGI(TAG, "Forecast Response %zu: %.512s", body.size(), body.c_str());
-
-    cJSON* root = cJSON_Parse(body.c_str());
-    if (root == nullptr) {
-        ESP_LOGE(TAG, "Failed to parse Forecast JSON");
-        return false;
-    }
-
-    bool success = false;
-    cJSON* list = cJSON_GetObjectItem(root, "list");
-    
-    if (cJSON_IsArray(list)) {
-        weather_info_.forecast.clear();
-        int count = 0;
-        int array_size = cJSON_GetArraySize(list);
-
-        for (int i = 0; i < array_size; i++) {
-            cJSON* item = cJSON_GetArrayItem(list, i);
-            cJSON* dt_txt = cJSON_GetObjectItem(item, "dt_txt");
-            
-            // Tìm mốc 12:00
-            if (cJSON_IsString(dt_txt) && strstr(dt_txt->valuestring, "12:00:00")) {
-                ForecastItem f_item;
-                
-                cJSON* dt = cJSON_GetObjectItem(item, "dt");
-                if (cJSON_IsNumber(dt)) f_item.day_name = GetDayNameFromTime((time_t)dt->valueint);
-
-                cJSON* main_forecast = cJSON_GetObjectItem(item, "main");
-                if (main_forecast) {
-                    cJSON* t = cJSON_GetObjectItem(main_forecast, "temp");
-                    if (cJSON_IsNumber(t)) f_item.temp = (float)t->valuedouble;
-                }
-                
-                cJSON* w_arr = cJSON_GetObjectItem(item, "weather");
-                if (w_arr && cJSON_GetArraySize(w_arr) > 0) {
-                    cJSON* w0 = cJSON_GetArrayItem(w_arr, 0);
-                    cJSON* ic = cJSON_GetObjectItem(w0, "icon");
-                    if (cJSON_IsString(ic)) f_item.icon_code = ic->valuestring;
-                }
-
-                weather_info_.forecast.push_back(f_item);
-                count++;
-                if (count >= 5) break; 
-            }
-        }
-        success = (count > 0);
-        ESP_LOGI(TAG, "Forecast Updated: %d days", count);
-    }
-
-    cJSON_Delete(root);
-    return success;
 }

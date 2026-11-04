@@ -13,10 +13,15 @@
 #define OPEN_WEATHERMAP_API_KEY_DEFAULT "ae8d3c2fda691593ce3e84472ef25784"
 #endif
 
-// Weather API endpoints
+// Weather API endpoints (Open-Meteo: free, no API key)
+#define OPEN_METEO_FORECAST_ENDPOINT "https://api.open-meteo.com/v1/forecast"
+#define OPEN_METEO_AIR_ENDPOINT "https://air-quality-api.open-meteo.com/v1/air-quality"
+#define OPEN_METEO_GEOCODING_ENDPOINT "https://geocoding-api.open-meteo.com/v1/search"
 #define WEATHER_API_ENDPOINT "https://api.openweathermap.org/data/2.5/"
 #define IP_LOCATION_API_ENDPOINT "https://ipwho.is"
 #define CITY_LOCATION_DEFAULT "Hanoi"
+#define CITY_LAT_DEFAULT 21.0285f
+#define CITY_LON_DEFAULT 105.8542f
 
 // HTTP timeout settings
 #define WEATHER_HTTP_TIMEOUT_MS 10000
