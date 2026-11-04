@@ -1,0 +1,14 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "ricky-s3-mini",
+            "sdkconfig_append": [
+                "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"",
+                "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+                "CONFIG_SR_WN_WN9_HIANDY_TTS2=y"
+            ]
+        }
+    ]
+}

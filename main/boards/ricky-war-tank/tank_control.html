@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Tank Control</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#0c0e0a;color:#e8f0d8;font-family:system-ui,-apple-system,sans-serif;min-height:100%}
+body{padding:12px 12px 24px;max-width:480px;margin:0 auto}
+h1{margin:0;font-size:18px;letter-spacing:.12em;color:#c8e86a}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.dot{width:10px;height:10px;border-radius:50%;background:#ff4d4d;display:inline-block;margin-right:6px;box-shadow:0 0 8px #ff4d4d}
+.dot.on{background:#b6ff4d;box-shadow:0 0 8px #b6ff4d}
+.card{background:#141810;border:1px solid #2a3320;border-radius:14px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{font-size:12px;color:#9aaa80;display:flex;gap:12px;flex-wrap:wrap}
+label{font-size:11px;color:#c8e86a;letter-spacing:.08em}
+input[type=range]{width:100%;accent-color:#c8e86a}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.seg button,.btn{flex:1;min-width:52px;border:0;border-radius:10px;padding:10px 8px;background:#1c2214;color:#e8f0d8;font-weight:700}
+.seg button.on{background:#3d4a18;color:#c8e86a}
+.pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0}
+.pad button{height:64px;font-size:18px;border-radius:14px;background:#1a2014;color:#c8e86a;border:1px solid #334022}
+.pad .stop{background:#7a1020;color:#fff;font-size:16px}
+.pad .spin{background:#243018;font-size:14px}
+.combo{display:flex;gap:8px;margin-top:8px}
+.combo button{flex:1;height:48px;border:0;border-radius:12px;font-weight:700;color:#fff}
+.combo .dance{background:#4b2d7a}
+.combo .patrol{background:#145c3a}
+.ghost{visibility:hidden}
+.joy{width:180px;height:180px;border-radius:50%;margin:8px auto;background:radial-gradient(#161c10,#0a1008);border:2px solid #3a4a22;position:relative;touch-action:none}
+.knob{width:64px;height:64px;border-radius:50%;background:#4a6d1c;position:absolute;left:58px;top:58px;pointer-events:none;box-shadow:0 0 16px #c8e86a88}
+.hint{font-size:11px;color:#7a8a60;text-align:center;margin-top:6px}
+.log{height:72px;overflow:auto;background:#070b06;border-radius:8px;padding:8px;font-size:11px;color:#c8e86a;font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>TANK PANEL</h1>
+  <div><span id="dot" class="dot"></span><span id="conn">OFF</span></div>
+</div>
+<div class="card status">
+  <span>IP: <b id="ip">--</b></span>
+  <span>MCU: ESP32-S3 · :8081</span>
+</div>
+<div class="card">
+  <div class="row">
+    <label>ÂM THANH</label>
+    <button class="btn" id="soundBtn" style="flex:0;min-width:120px">TẮT</button>
+  </div>
+  <div class="hint">Mặc định tắt. Bật để phát tiếng máy khi xe chạy.</div>
+</div>
+<div class="card">
+  <div class="row"><label>SPEED</label><b id="spdVal">60</b></div>
+  <input id="spd" type="range" min="30" max="100" value="60">
+  <label>DURATION</label>
+  <div class="seg" id="durs"></div>
+</div>
+<div class="card">
+  <div class="pad">
+    <button class="ghost" tabindex="-1"></button>
+    <button data-a="forward">▲ TIẾN</button>
+    <button class="ghost" tabindex="-1"></button>
+    <button data-a="turn_left">↺ RẼ TRÁI</button>
+    <button class="stop" data-a="stop">STOP</button>
+    <button data-a="turn_right">↻ RẼ PHẢI</button>
+    <button class="spin" data-a="spin_left">⟲ XOAY TRÁI</button>
+    <button data-a="backward">▼ LÙI</button>
+    <button class="spin" data-a="spin_right">⟳ XOAY PHẢI</button>
+  </div>
+  <div class="joy" id="joy"><div class="knob" id="knob"></div></div>
+  <div class="hint" id="joyHint">JOYSTICK · IDLE</div>
+  <div class="combo">
+    <button class="dance" data-a="dance">NHẢY MÚA</button>
+    <button class="patrol" data-a="patrol">TUẦN TRA</button>
+  </div>
+</div>
+<div class="card">
+  <div class="row"><label>LOG</label><button class="btn" id="clr" style="flex:0">CLEAR</button></div>
+  <div class="log" id="log"></div>
+  <div class="hint">W/S tiến lùi · A/D rẽ · Q/E xoay · R nhảy · P tuần tra · Space STOP</div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const logEl = $('#log'), spd = $('#spd'), spdVal = $('#spdVal');
+let duration = 800, hold = false, soundOn = false, busy = false;
+const durs = [800,1000,3000,5000,0];
+const durL = ['0.8s','1s','3s','5s','∞'];
+const moveActs = ['forward','backward','turn_left','turn_right','spin_left','spin_right'];
+function log(m){ const t=new Date().toLocaleTimeString(); logEl.innerHTML += t+' '+m+'<br>'; logEl.scrollTop=logEl.scrollHeight; }
+function setConn(on){ $('#dot').classList.toggle('on',on); $('#conn').textContent = on?'ON':'OFF'; }
+spd.oninput = () => spdVal.textContent = spd.value;
+const durBox = $('#durs');
+durs.forEach((d,i)=>{
+  const b=document.createElement('button'); b.textContent=durL[i];
+  if(i===0) b.className='on';
+  b.onclick=()=>{ [...durBox.children].forEach(x=>x.classList.remove('on')); b.classList.add('on'); duration=d; hold=(d===0); };
+  durBox.appendChild(b);
+});
+async function postAction(args){
+  if(busy) return;
+  busy = true;
+  try{
+    const r = await fetch('/api/action',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Connection':'close'},
+      body:JSON.stringify(args),
+      cache:'no-store'
+    });
+    if(!r.ok) throw new Error(r.status);
+    log(args.action||'ok');
+  }catch(e){ log('ERR '+e.message); setConn(false); }
+  finally{ busy = false; }
+}
+function go(action, extra={}){
+  const body = {action, speed:+spd.value, duration: hold?0:duration, ...extra};
+  return postAction(body);
+}
+document.querySelectorAll('[data-a]').forEach(btn=>{
+  const a = btn.dataset.a;
+  const move = moveActs.includes(a);
+  btn.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    go(a);
+  });
+  btn.addEventListener('pointerup', e=>{
+    if(move && hold && a!=='stop') go('stop');
+  });
+  btn.addEventListener('pointerleave', e=>{
+    if(move && hold && a!=='stop') go('stop');
+  });
+});
+$('#clr').onclick=()=>{ logEl.innerHTML=''; };
+async function poll(){
+  try{
+    const r = await fetch('/api/status',{cache:'no-store',headers:{'Connection':'close'}});
+    const j = await r.json();
+    setConn(true); $('#ip').textContent=j.ip||'--';
+    soundOn = !!j.sound;
+    updateSoundBtn();
+  }catch(e){ setConn(false); }
+}
+function updateSoundBtn(){
+  const b = $('#soundBtn');
+  b.textContent = soundOn ? 'BẬT' : 'TẮT';
+  b.classList.toggle('on', soundOn);
+}
+$('#soundBtn').onclick = async ()=>{
+  const action = soundOn ? 'sound_off' : 'sound_on';
+  await postAction({action});
+  soundOn = !soundOn;
+  updateSoundBtn();
+};
+/* HTTP-only: no WebSocket (was exhausting ESP sockets and blocking music). */
+setInterval(poll, 5000); poll();
+const joy=$('#joy'), knob=$('#knob'), hint=$('#joyHint');
+let lastJoy=null;
+function joyPos(e){
+  const r=joy.getBoundingClientRect();
+  const x=(e.clientX??e.touches[0].clientX)-r.left-r.width/2;
+  const y=(e.clientY??e.touches[0].clientY)-r.top-r.height/2;
+  const m=Math.min(Math.hypot(x,y),70);
+  const a=Math.atan2(y,x); return {x:Math.cos(a)*m,y:Math.sin(a)*m,ang:a*180/Math.PI,m};
+}
+function setKnob(x,y){ knob.style.left=(58+x)+'px'; knob.style.top=(58+y)+'px'; }
+function joyAction(p){
+  if(p.m<24) return null;
+  if(p.ang>-60 && p.ang<60) return 'turn_right';
+  if(p.ang>120 || p.ang<-120) return 'turn_left';
+  if(p.ang<-60 && p.ang>-120) return 'forward';
+  return 'backward';
+}
+function onJoy(e){
+  e.preventDefault();
+  const t=e.touches?e.touches[0]:e; const p=joyPos(t); setKnob(p.x,p.y);
+  const a=joyAction(p); hint.textContent=a?('JOYSTICK · '+a.toUpperCase()):'JOYSTICK · IDLE';
+  if(a && a!==lastJoy){ lastJoy=a; go(a,{duration:0}); }
+}
+function endJoy(){ setKnob(0,0); hint.textContent='JOYSTICK · IDLE'; if(lastJoy){ go('stop'); lastJoy=null; } }
+joy.addEventListener('pointerdown', onJoy);
+joy.addEventListener('pointermove', e=>{ if(e.buttons) onJoy(e); });
+joy.addEventListener('pointerup', endJoy);
+joy.addEventListener('pointerleave', endJoy);
+document.addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase();
+  if(k==='w') go('forward');
+  else if(k==='s') go('backward');
+  else if(k==='a') go('turn_left');
+  else if(k==='d') go('turn_right');
+  else if(k==='q') go('spin_left');
+  else if(k==='e') go('spin_right');
+  else if(k==='r') go('dance');
+  else if(k==='p') go('patrol');
+  else if(k===' ') { e.preventDefault(); go('stop'); }
+  else if(e.key==='ArrowUp'){ spd.value=Math.min(100,+spd.value+5); spdVal.textContent=spd.value; }
+  else if(e.key==='ArrowDown'){ spd.value=Math.max(30,+spd.value-5); spdVal.textContent=spd.value; }
+});
+</script>
+</body>
+</html>

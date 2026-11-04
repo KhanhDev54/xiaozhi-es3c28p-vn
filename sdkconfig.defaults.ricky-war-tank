@@ -1,0 +1,7 @@
+# Ricky War Tank (XH-S3E-AI): log qua USB, GPIO 43/44 cho motor B
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+
+# Enough sockets for MQTT + music stream + short-lived HTTP control (no WS)
+CONFIG_LWIP_MAX_SOCKETS=16
+CONFIG_LWIP_SO_RCVBUF=y

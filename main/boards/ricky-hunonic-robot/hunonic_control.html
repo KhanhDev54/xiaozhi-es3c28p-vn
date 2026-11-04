@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hunonic Control</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#0b1018;color:#dce8ff;font-family:system-ui,-apple-system,sans-serif;min-height:100%}
+body{padding:12px 12px 24px;max-width:520px;margin:0 auto}
+h1{margin:0;font-size:17px;letter-spacing:.1em;color:#7ec8ff}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.dot{width:10px;height:10px;border-radius:50%;background:#ff4d4d;display:inline-block;margin-right:6px;box-shadow:0 0 8px #ff4d4d}
+.dot.on{background:#4dffb5;box-shadow:0 0 8px #4dffb5}
+.card{background:#121826;border:1px solid #243044;border-radius:14px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{font-size:12px;color:#8aa0b8;display:flex;gap:12px;flex-wrap:wrap}
+label{font-size:11px;color:#7ec8ff;letter-spacing:.08em}
+input[type=range]{width:100%;accent-color:#7ec8ff}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.seg button,.btn{flex:1;min-width:52px;border:0;border-radius:10px;padding:10px 8px;background:#1a2433;color:#dce8ff;font-weight:700}
+.seg button.on{background:#163a5c;color:#7ec8ff}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.pad button{height:56px;font-size:13px;border-radius:12px;background:#182232;color:#7ec8ff;border:1px solid #2a4060}
+.pad .stop{background:#7a1020;color:#fff;font-size:13px}
+.ghost{visibility:hidden}
+.hint{font-size:11px;color:#6a829a;text-align:center;margin-top:6px}
+.log{height:72px;overflow:auto;background:#070b12;border-radius:8px;padding:8px;font-size:11px;color:#7ec8ff;font-family:ui-monospace,monospace}
+.joy{width:160px;height:160px;border-radius:50%;margin:8px auto;background:radial-gradient(#121a28,#070b12);border:2px solid #2a4a6c;position:relative;touch-action:none}
+.knob{width:56px;height:56px;border-radius:50%;background:#1c5a8a;position:absolute;left:52px;top:52px;pointer-events:none;box-shadow:0 0 16px #7ec8ff88}
+h2{margin:0 0 8px;font-size:12px;letter-spacing:.14em;color:#9ecfff}
+.combo{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.combo button{height:44px;border:0;border-radius:10px;background:#243044;color:#dce8ff;font-weight:700}
+.combo .dance{background:#4b2d7a}
+.combo .patrol{background:#145c3a}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>HUNONIC 839</h1>
+  <div><span id="dot" class="dot"></span><span id="conn">OFF</span></div>
+</div>
+<div class="card status">
+  <span>IP: <b id="ip">--</b></span>
+  <span>MCU: ESP32-S3</span>
+  <button class="btn" id="qrBtn" style="flex:0;min-width:90px">QR WEB</button>
+</div>
+<div class="card">
+  <div class="row"><label>SPEED</label><b id="spdVal">92</b></div>
+  <input id="spd" type="range" min="30" max="100" value="92">
+  <div class="row"><label>STEP MS</label><b id="stepVal">500</b></div>
+  <input id="step" type="range" min="80" max="800" value="500" step="20">
+  <div class="row"><label>STEPS</label><b id="stepsVal">2</b></div>
+  <input id="steps" type="range" min="0" max="20" value="2">
+  <div class="row"><label>DURATION MS (TRƯỢT)</label><b id="durVal">800</b></div>
+  <input id="dur" type="range" min="0" max="10000" value="800" step="100">
+  <div class="hint">Bước: SPEED + STEP MS + STEPS. Trượt: SPEED + DURATION (0 = ∞ đến STOP).</div>
+  <button class="btn" id="saveBtn" style="margin-top:10px">LƯU CẤU HÌNH</button>
+</div>
+<div class="card">
+  <div class="cols">
+    <div>
+      <h2>BƯỚC</h2>
+      <div class="pad">
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="walk_forward">▲ TỚI</button>
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="walk_left">◀ TRÁI</button>
+        <button class="stop" data-a="stop">STOP</button>
+        <button data-a="walk_right">▶ PHẢI</button>
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="walk_backward">▼ LÙI</button>
+        <button class="ghost" tabindex="-1"></button>
+      </div>
+    </div>
+    <div>
+      <h2>TRƯỢT</h2>
+      <div class="pad">
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="slide_forward">▲ TỚI</button>
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="slide_left">◀ TRÁI</button>
+        <button class="stop" data-a="stop">STOP</button>
+        <button data-a="slide_right">▶ PHẢI</button>
+        <button class="ghost" tabindex="-1"></button>
+        <button data-a="slide_backward">▼ LÙI</button>
+        <button class="ghost" tabindex="-1"></button>
+      </div>
+    </div>
+  </div>
+  <div class="joy" id="joy"><div class="knob" id="knob"></div></div>
+  <div class="hint" id="joyHint">JOYSTICK · TRƯỢT</div>
+  <div class="combo">
+    <button class="dance" data-a="dance">NHẢY MÚA</button>
+    <button class="patrol" data-a="patrol">TUẦN TRA</button>
+  </div>
+</div>
+<div class="card">
+  <div class="row"><label>LOG</label><button class="btn" id="clr" style="flex:0">CLEAR</button></div>
+  <div class="log" id="log"></div>
+  <div class="hint">W/A/S/D bước · I/J/K/L trượt · Q nhảy · P tuần tra · Space STOP</div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const logEl = $('#log'), spd = $('#spd'), spdVal = $('#spdVal');
+const step = $('#step'), stepVal = $('#stepVal'), steps = $('#steps'), stepsVal = $('#stepsVal');
+const dur = $('#dur'), durVal = $('#durVal');
+let ws = null;
+const walkActs = ['walk_forward','walk_backward','walk_left','walk_right'];
+const slideActs = ['slide_forward','slide_backward','slide_left','slide_right'];
+function log(m){ const t=new Date().toLocaleTimeString(); logEl.innerHTML += t+' '+m+'<br>'; logEl.scrollTop=logEl.scrollHeight; }
+function setConn(on){ $('#dot').classList.toggle('on',on); $('#conn').textContent = on?'ON':'OFF'; }
+function fmtDur(v){ v=+v; return v<=0 ? '∞' : (v+' ('+(v/1000)+'s)'); }
+spd.oninput = () => spdVal.textContent = spd.value;
+step.oninput = () => stepVal.textContent = step.value;
+steps.oninput = () => stepsVal.textContent = steps.value;
+dur.oninput = () => durVal.textContent = fmtDur(dur.value);
+durVal.textContent = fmtDur(dur.value);
+async function postAction(args){
+  try{
+    const r = await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args)});
+    if(!r.ok) throw new Error(r.status);
+    log(args.action||'ok');
+  }catch(e){ log('ERR '+e.message); }
+}
+function go(action, extra={}){
+  const isWalk = walkActs.includes(action);
+  const body = {
+    action, speed:+spd.value,
+    duration: isWalk ? 0 : +dur.value,
+    steps: isWalk ? +steps.value : 0,
+    step_ms:+step.value, gap_ms:20, ...extra
+  };
+  return postAction(body);
+}
+document.querySelectorAll('[data-a]').forEach(btn=>{
+  const a = btn.dataset.a;
+  const slide = slideActs.includes(a);
+  btn.addEventListener('pointerdown', e=>{ e.preventDefault(); go(a); });
+  btn.addEventListener('pointerup', e=>{ if(slide && +dur.value===0 && a!=='stop') go('stop'); });
+  btn.addEventListener('pointerleave', e=>{ if(slide && +dur.value===0 && a!=='stop') go('stop'); });
+});
+$('#clr').onclick=()=>{ logEl.innerHTML=''; };
+$('#qrBtn').onclick=()=>go('show_qrcode');
+function applyCfg(j){
+  if(j.speed!=null){ spd.value=j.speed; spdVal.textContent=spd.value; }
+  if(j.step_ms!=null){ step.value=j.step_ms; stepVal.textContent=step.value; }
+  if(j.steps!=null){ steps.value=j.steps; stepsVal.textContent=steps.value; }
+  if(j.duration!=null){ dur.value=j.duration; durVal.textContent=fmtDur(dur.value); }
+}
+let cfgLoaded=false;
+$('#saveBtn').onclick=async ()=>{
+  await postAction({
+    action:'save_config', speed:+spd.value, step_ms:+step.value,
+    steps:+steps.value, duration:+dur.value, gap_ms:20
+  });
+  try{
+    const r = await fetch('/api/status'); const j = await r.json();
+    applyCfg(j); cfgLoaded=true;
+  }catch(e){}
+};
+async function poll(){
+  try{
+    const r = await fetch('/api/status'); const j = await r.json();
+    setConn(true); $('#ip').textContent=j.ip||'--';
+    if(!cfgLoaded){ applyCfg(j); cfgLoaded=true; }
+  }catch(e){ setConn(false); }
+}
+setInterval(poll, 2000); poll();
+function connectWs(){
+  try{
+    ws = new WebSocket('ws://'+location.host+'/ws');
+    ws.onopen=()=>{ setConn(true); log('WS connected'); };
+    ws.onclose=()=>{ log('WS closed'); setTimeout(connectWs,2000); };
+    ws.onerror=()=>log('WS error');
+  }catch(e){ log('WS '+e.message); }
+}
+connectWs();
+const joy=$('#joy'), knob=$('#knob'), hint=$('#joyHint');
+let lastJoy=null;
+function joyPos(e){
+  const r=joy.getBoundingClientRect();
+  const x=(e.clientX??e.touches[0].clientX)-r.left-r.width/2;
+  const y=(e.clientY??e.touches[0].clientY)-r.top-r.height/2;
+  const m=Math.min(Math.hypot(x,y),58);
+  const a=Math.atan2(y,x); return {x:Math.cos(a)*m,y:Math.sin(a)*m,ang:a*180/Math.PI,m};
+}
+function setKnob(x,y){ knob.style.left=(52+x)+'px'; knob.style.top=(52+y)+'px'; }
+function joyAction(p){
+  if(p.m<22) return null;
+  if(p.ang>-60 && p.ang<60) return 'slide_right';
+  if(p.ang>120 || p.ang<-120) return 'slide_left';
+  if(p.ang<-60 && p.ang>-120) return 'slide_forward';
+  return 'slide_backward';
+}
+function onJoy(e){
+  e.preventDefault();
+  const t=e.touches?e.touches[0]:e; const p=joyPos(t); setKnob(p.x,p.y);
+  const a=joyAction(p); hint.textContent=a?('JOYSTICK · '+a.toUpperCase()):'JOYSTICK · TRƯỢT';
+  if(a && a!==lastJoy){ lastJoy=a; go(a,{duration:0}); }
+}
+function endJoy(){ setKnob(0,0); hint.textContent='JOYSTICK · TRƯỢT'; if(lastJoy){ go('stop'); lastJoy=null; } }
+joy.addEventListener('pointerdown', onJoy);
+joy.addEventListener('pointermove', e=>{ if(e.buttons) onJoy(e); });
+joy.addEventListener('pointerup', endJoy);
+joy.addEventListener('pointerleave', endJoy);
+document.addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase();
+  if(k==='w') go('walk_forward');
+  else if(k==='s') go('walk_backward');
+  else if(k==='a') go('walk_left');
+  else if(k==='d') go('walk_right');
+  else if(k==='i') go('slide_forward');
+  else if(k==='k') go('slide_backward');
+  else if(k==='j') go('slide_left');
+  else if(k==='l') go('slide_right');
+  else if(k==='q') go('dance');
+  else if(k==='p') go('patrol');
+  else if(k===' ') { e.preventDefault(); go('stop'); }
+});
+</script>
+</body>
+</html>
