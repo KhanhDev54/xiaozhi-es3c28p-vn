@@ -11,6 +11,7 @@
 #include <esp_lcd_touch_ft6x36.h>
 #include <esp_lcd_touch_ft5x06.h>
 #include "display/lcd_touch.h"
+#include "ft6336_touch.h"
 #endif
 #include <lvgl.h>
 #include <esp_lvgl_port.h>
@@ -179,6 +180,35 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
       ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
   }
 
+  // Shows the touch controller status on screen ~10 s after boot (once the UI is up)
+  static void ShowTouchStatus(bool ok, bool found, uint8_t vend, uint8_t chip) {
+    char* msg = (char*)malloc(96);
+    if (msg == nullptr) return;
+    if (ok) {
+      snprintf(msg, 96, "Cảm ứng OK (chip %02X/%02X)", chip, vend);
+    } else if (found) {
+      snprintf(msg, 96, "Lỗi khởi tạo cảm ứng (chip %02X/%02X)", chip, vend);
+    } else {
+      snprintf(msg, 96, "Không thấy chip cảm ứng (I2C 0x38)");
+    }
+    xTaskCreate([](void* arg) {
+        char* m = static_cast<char*>(arg);
+        vTaskDelay(pdMS_TO_TICKS(10000));
+#ifdef CONFIG_WEATHER_IDLE_DISPLAY_ENABLE
+        Application::GetInstance().SuppressIdleCard(7);
+#endif
+        auto display = Board::GetInstance().GetDisplay();
+        if (display) {
+#ifdef CONFIG_WEATHER_IDLE_DISPLAY_ENABLE
+          display->HideIdleCard();
+#endif
+          display->ShowNotification(m, 6000);
+        }
+        free(m);
+        vTaskDelete(nullptr);
+    }, "touch_status", 3072, msg, 2, nullptr);
+  }
+
   bool CheckI2CDevice(uint8_t addr, const char* name) {
     if (i2c_master_probe(codec_i2c_bus_, addr, 100) == ESP_OK) {
       ESP_LOGI(TAG, "✓ Found %s at I2C address 0x%02X", name, addr);
@@ -279,17 +309,6 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
     CheckI2CDevice(0x18, "ES8311 Audio Codec");
     bool touch_found = CheckI2CDevice(TOUCH_I2C_ADDR, "FT6236G/FT6336 Touch");
 
-    // Tell the user on screen whether a touch controller exists (ES3C28P has one,
-    // the plain ES3N28P does not). Shown ~10 s after boot, once the UI is up.
-    xTaskCreate([](void* arg) {
-        bool found = (bool)(intptr_t)arg;
-        vTaskDelay(pdMS_TO_TICKS(10000));
-        auto display = Board::GetInstance().GetDisplay();
-        if (display) {
-          display->ShowNotification(found ? "Cảm ứng: OK" : "Không thấy chip cảm ứng (I2C 0x38)", 6000);
-        }
-        vTaskDelete(nullptr);
-    }, "touch_probe_msg", 3072, (void*)(intptr_t)touch_found, 2, nullptr);
     
     // Touch configuration - enable interrupt, use polling mode
     const esp_lcd_touch_config_t tp_cfg = {
@@ -328,40 +347,14 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
       return;
     }
     
-    ESP_LOGI(TAG, "Creating FT6x36 touch controller (compatible with FT6336)...");
+    ESP_LOGI(TAG, "Creating FT6336 touch controller (lenient driver)...");
     esp_lcd_touch_handle_t tp_ = NULL;
-    ret = esp_lcd_touch_new_i2c_ft6x36(tp_io_handle, &tp_cfg, &tp_);
+    uint8_t vend_id = 0, chip_id = 0;
+    ret = ft6336_touch_new(tp_io_handle, &tp_cfg, &tp_, &vend_id, &chip_id);
+    ShowTouchStatus(ret == ESP_OK, touch_found, vend_id, chip_id);
     if (ret != ESP_OK) {
-      ESP_LOGE(TAG, "Failed to create FT6x36 touch controller: %s", esp_err_to_name(ret));
+      ESP_LOGE(TAG, "Failed to create touch controller: %s", esp_err_to_name(ret));
       return;
-    }
-    ESP_LOGI(TAG, "✅ Touch panel FT6236G initialized successfully with custom driver!");
-
-    // Set touch threshold
-    uint8_t threshold_reg[1] = {TOUCH_FT62XX_DEFAULT_THRESHOLD};
-    ret = esp_lcd_panel_io_tx_param(tp_io_handle, TOUCH_FT62XX_REG_THRESHHOLD, threshold_reg, 1);
-    if (ret != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to enable touch panel threshold: %s", esp_err_to_name(ret));
-    }
-
-    // Set point rate
-    uint8_t rate_reg[1] = {0x0A}; // 100ms
-    ret = esp_lcd_panel_io_tx_param(tp_io_handle, TOUCH_FT62XX_REG_POINTRATE, rate_reg, 1);
-    if (ret != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to enable touch panel point rate: %s", esp_err_to_name(ret));
-    }
-
-    // Keep the controller active (do not drop into monitor/sleep mode), normal mode
-    uint8_t ctrl_reg[1] = {0x00};
-    esp_lcd_panel_io_tx_param(tp_io_handle, 0x86, ctrl_reg, 1);   // CTRL: stay active
-    uint8_t mode_reg[1] = {0x00};
-    esp_lcd_panel_io_tx_param(tp_io_handle, 0x00, mode_reg, 1);   // DEV_MODE: normal
-
-    // Interrupt pin mode (not used for reading any more, we poll)
-    uint8_t int_mode_reg[1] = {0x00}; // 0 = polling, 1 = trigger
-    ret = esp_lcd_panel_io_tx_param(tp_io_handle, TOUCH_FT62XX_REG_INTMODE, int_mode_reg, 1);
-    if (ret != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to enable touch panel interrupt output: %s", esp_err_to_name(ret));
     }
 
     touch_ = new I2cLcdTouch(tp_, tp_io_handle, 
@@ -374,6 +367,11 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
 
     touch_->SetGestureCallback([this](TouchGesture gesture, int16_t x, int16_t y) {
       ESP_LOGI(TAG, "Touch gesture detected: %d at (%d, %d)", static_cast<int>(gesture), x, y);
+#ifdef CONFIG_WEATHER_IDLE_DISPLAY_ENABLE
+      // Any touch: leave the idle clock/weather card so the result is visible
+      Application::GetInstance().SuppressIdleCard(5);
+      Board::GetInstance().GetDisplay()->HideIdleCard();
+#endif
       switch (gesture) {
         case TOUCH_GESTURE_SWIPE_RIGHT:
           {
@@ -400,7 +398,7 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
               
               backlight->SetBrightness(new_brightness);
               auto display = board.GetDisplay();
-              display->ShowNotification("Brightness: " + std::to_string(new_brightness));
+              display->ShowNotification("Độ sáng: " + std::to_string(new_brightness));
             }
           }
           break;
@@ -430,7 +428,7 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
             
             backlight->SetBrightness(new_brightness);
             auto display = board.GetDisplay();
-            display->ShowNotification("Brightness: " + std::to_string(new_brightness));
+            display->ShowNotification("Độ sáng: " + std::to_string(new_brightness));
           }
           break;
         case TOUCH_GESTURE_SWIPE_DOWN:

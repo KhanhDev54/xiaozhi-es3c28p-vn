@@ -1775,8 +1775,9 @@ void Application::StartWeatherIdleTask() {
             tick_count++;
 
             if (app->GetDeviceState() == kDeviceStateIdle) {
-                if (app->IsMediaPlaying()) {
-                    // When music/radio is playing, hide the idle screen
+                if (app->IsMediaPlaying() || app->IdleCardSuppressed()) {
+                    // When music/radio is playing (or a touch/button notification is
+                    // being shown), hide the idle screen
                     auto display = Board::GetInstance().GetDisplay();
                     display->HideIdleCard();
                 } else {
