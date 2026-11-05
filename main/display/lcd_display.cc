@@ -16,6 +16,7 @@ Contributors: Xiaozhi AI-IoT Vietnam Team
 #include <esp_err.h>
 #include <esp_lvgl_port.h>
 #include <esp_psram.h>
+#include <esp_heap_caps.h>
 #include <string>
 #include <cstdint>
 #include <cstring>
@@ -214,6 +215,32 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     esp_timer_create(&preview_timer_args, &preview_timer_);
 }
 
+// --- SPI flush through a pre-allocated internal bounce buffer -----------------
+// The LVGL draw buffers live in PSRAM. The SPI driver cannot DMA from PSRAM, so
+// on every flush it allocated an internal "priv TX buffer"; when internal RAM was
+// fragmented (Wi-Fi + BLE + wake word) that failed, the flush never completed and
+// LVGL hung (frozen screen, watchdog on taskLVGL). Allocate the bounce buffer once
+// at boot instead, and never leave LVGL waiting if a transfer cannot be queued.
+static esp_lcd_panel_handle_t s_bounce_panel = nullptr;
+static uint8_t* s_bounce_buf = nullptr;
+static size_t s_bounce_size = 0;
+
+static void BounceFlushCallback(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
+    size_t pixels = lv_area_get_size(area);
+    lv_draw_sw_rgb565_swap(px_map, pixels);
+    size_t bytes = pixels * 2;
+    const uint8_t* src = px_map;
+    if (s_bounce_buf != nullptr && bytes <= s_bounce_size) {
+        memcpy(s_bounce_buf, px_map, bytes);
+        src = s_bounce_buf;
+    }
+    esp_err_t err = esp_lcd_panel_draw_bitmap(s_bounce_panel, area->x1, area->y1, area->x2 + 1,
+                                              area->y2 + 1, src);
+    if (err != ESP_OK) {
+        lv_display_flush_ready(disp);  // drop this band rather than freezing the UI
+    }
+}
+
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                            int width, int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y, bool swap_xy)
     : LcdDisplay(panel_io, panel, width, height) {
@@ -291,6 +318,19 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     if (display_ == nullptr) {
         ESP_LOGE(TAG, "Failed to add display");
         return;
+    }
+
+    // Own flush callback: copy each band into an internal DMA buffer allocated now
+    s_bounce_size = static_cast<size_t>(width_) * 20 * sizeof(uint16_t);
+    s_bounce_buf = static_cast<uint8_t*>(heap_caps_malloc(s_bounce_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    s_bounce_panel = panel_;
+    if (s_bounce_buf != nullptr) {
+        lvgl_port_lock(0);
+        lv_display_set_flush_cb(display_, BounceFlushCallback);
+        lvgl_port_unlock();
+        ESP_LOGI(TAG, "SPI bounce buffer: %u bytes internal", (unsigned)s_bounce_size);
+    } else {
+        ESP_LOGW(TAG, "No internal bounce buffer, using default flush");
     }
 
     if (offset_x != 0 || offset_y != 0) {
