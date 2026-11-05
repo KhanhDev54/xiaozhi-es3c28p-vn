@@ -268,7 +268,7 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         // internal RAM ran low (Wi-Fi + BLE + wake word) that allocation failed,
         // the flush never completed and the LVGL task hung (screen frozen,
         // task watchdog, wake word starved).
-        .buffer_size = static_cast<uint32_t>(width_ * 20),
+        .buffer_size = static_cast<uint32_t>(width_ * 12),
         .double_buffer = false,
         .trans_size = 0,
         .hres = static_cast<uint32_t>(width_),
