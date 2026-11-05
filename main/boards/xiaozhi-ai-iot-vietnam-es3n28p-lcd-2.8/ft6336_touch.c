@@ -21,10 +21,31 @@ static esp_err_t wr(esp_lcd_touch_handle_t tp, uint8_t reg, uint8_t val) {
     return esp_lcd_panel_io_tx_param(tp->io, reg, &val, 1);
 }
 
+// Diagnostics: a summary line every ~5 s of polling, and every press is logged
+static uint32_t s_reads, s_errors, s_presses;
+static uint8_t s_last_td;
+
 static esp_err_t ft_read_data(esp_lcd_touch_handle_t tp) {
     uint8_t data[7];
-    ESP_RETURN_ON_ERROR(rd(tp, 0x00, data, sizeof(data)), TAG, "I2C read error");
+    s_reads++;
+    if (s_reads % 500 == 0) {
+        ESP_LOGI(TAG, "diag: reads=%lu errors=%lu presses=%lu last_td=0x%02X",
+                 (unsigned long)s_reads, (unsigned long)s_errors, (unsigned long)s_presses, s_last_td);
+    }
+    esp_err_t err = rd(tp, 0x00, data, sizeof(data));
+    if (err != ESP_OK) {
+        if (s_errors++ % 50 == 0) ESP_LOGE(TAG, "I2C read error: %s", esp_err_to_name(err));
+        return err;
+    }
     uint8_t points = data[0x02] & 0x0F;
+    if (data[0x02] != s_last_td) {
+        if (points > 0 && (s_last_td & 0x0F) == 0) {
+            s_presses++;
+            ESP_LOGI(TAG, "press raw: td=0x%02X x=%d y=%d", data[0x02],
+                     ((data[0x03] & 0x0F) << 8) | data[0x04], ((data[0x05] & 0x0F) << 8) | data[0x06]);
+        }
+        s_last_td = data[0x02];
+    }
     if (points == 0 || points > 2) {
         return ESP_OK;
     }

@@ -71,12 +71,13 @@ function setProgress(ratio, bytesPerSec) {
 }
 function refreshButtons() {
   const connected = !!loader;
-  els.connect.disabled = busy || connected;
+  els.connect.disabled = busy || connected || (typeof mon !== "undefined" && mon.running);
   els.disconnect.disabled = busy || !connected;
   els.flash.disabled = busy || !connected || !image;
   els.erase.disabled = busy || !connected;
   els.fwSelect.disabled = busy;
   els.baud.disabled = connected;
+  if (typeof monButtons === "function" && typeof mon !== "undefined") monButtons();
 }
 
 // ---------- firmware list ----------
@@ -275,6 +276,90 @@ async function erase() {
   }
 }
 
+
+// ---------- serial monitor (read the device log) ----------
+const mon = { port: null, reader: null, running: false, text: "" };
+const monEls = {
+  open: $("btnMonOpen"), reset: $("btnMonReset"), close: $("btnMonClose"),
+  copy: $("btnMonCopy"), save: $("btnMonSave"), log: $("monLog"),
+};
+const ANSI = /\x1b\[[0-9;]*m/g;
+function monWrite(t) {
+  mon.text += t;
+  if (mon.text.length > 400000) mon.text = mon.text.slice(-300000);
+  monEls.log.textContent = mon.text;
+  monEls.log.scrollTop = monEls.log.scrollHeight;
+}
+function monButtons() {
+  monEls.open.disabled = mon.running || !!loader;
+  monEls.reset.disabled = !mon.running;
+  monEls.close.disabled = !mon.running;
+}
+async function monOpen() {
+  if (loader) { log("Hãy bấm Ngắt ở trên trước khi mở log."); return; }
+  try {
+    mon.port = await navigator.serial.requestPort();
+    await mon.port.open({ baudRate: 115200 });
+  } catch (e) {
+    monWrite(`[Không mở được cổng: ${e.message || e}]\n`);
+    mon.port = null; return;
+  }
+  mon.running = true; refreshButtons();
+  monWrite(`[Đã mở log lúc ${ts()} — thao tác trên mạch để xem]\n`);
+  const dec = new TextDecoder();
+  while (mon.running && mon.port && mon.port.readable) {
+    mon.reader = mon.port.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await mon.reader.read();
+        if (done) break;
+        if (value) monWrite(dec.decode(value, { stream: true }).replace(ANSI, ""));
+      }
+    } catch (e) {
+      if (mon.running) monWrite(`\n[Lỗi đọc: ${e.message || e}]\n`);
+    } finally {
+      try { mon.reader.releaseLock(); } catch (_) {}
+      mon.reader = null;
+    }
+  }
+}
+async function monClose() {
+  mon.running = false;
+  try { if (mon.reader) await mon.reader.cancel(); } catch (_) {}
+  try { if (mon.port) await mon.port.close(); } catch (_) {}
+  mon.port = null; refreshButtons();
+  monWrite(`\n[Đã dừng lúc ${ts()}]\n`);
+}
+async function monReset() {
+  if (!mon.port) return;
+  try {
+    await mon.port.setSignals({ dataTerminalReady: false, requestToSend: true });
+    await new Promise((r) => setTimeout(r, 120));
+    await mon.port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    monWrite(`\n[Đã gửi lệnh khởi động lại ${ts()}]\n`);
+  } catch (e) {
+    monWrite(`\n[Không khởi động lại được, hãy bấm nút RESET trên mạch]\n`);
+  }
+}
+function monInit() {
+  monEls.open.addEventListener("click", monOpen);
+  monEls.close.addEventListener("click", monClose);
+  monEls.reset.addEventListener("click", monReset);
+  monEls.copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(mon.text); monWrite("\n[Đã sao chép log]\n"); }
+    catch (_) { monWrite("\n[Không sao chép được — dùng nút Tải file .txt]\n"); }
+  });
+  monEls.save.addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([mon.text], { type: "text/plain" }));
+    a.download = `xiaozhi-log-${Date.now()}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  if (!("serial" in navigator)) monEls.open.disabled = true;
+  monButtons();
+}
+
 // ---------- wiring ----------
 function init() {
   log("Sẵn sàng.");
@@ -294,6 +379,7 @@ function init() {
     });
   }
 
+  monInit();
   els.connect.addEventListener("click", connect);
   els.disconnect.addEventListener("click", disconnect);
   els.flash.addEventListener("click", flash);

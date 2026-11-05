@@ -88,6 +88,20 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2><span class="step">3</span> Xem log của mạch <span class="hint">(để báo lỗi)</span></h2>
+      <p class="muted">Dùng sau khi đã nạp xong và đã bấm <b>Ngắt</b> ở trên. Bấm <b>Mở log</b>, chọn cổng COM của mạch,
+        rồi thao tác trên mạch (chạm, vuốt…). Xong bấm <b>Sao chép</b> và dán gửi cho người hỗ trợ.</p>
+      <div class="actions">
+        <button id="btnMonOpen" class="btn btn-primary">Mở log</button>
+        <button id="btnMonReset" class="btn btn-ghost" disabled>Khởi động lại mạch</button>
+        <button id="btnMonClose" class="btn btn-ghost" disabled>Dừng</button>
+        <button id="btnMonCopy" class="btn btn-ghost">Sao chép</button>
+        <button id="btnMonSave" class="btn btn-ghost">Tải file .txt</button>
+      </div>
+      <pre id="monLog" class="log mon" aria-live="polite"></pre>
+    </section>
+
     <section class="card help">
       <h2>Hướng dẫn nhanh</h2>
       <ol>
