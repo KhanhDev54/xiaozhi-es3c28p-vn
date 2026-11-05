@@ -71,6 +71,9 @@ bool Solve(uint16_t r1x, uint16_t r1y, uint16_t r2x, uint16_t r2y, int width, in
     return true;
 }
 
+static volatile bool s_flip = false;
+void SetFlip(bool flip) { s_flip = flip; }
+
 void Process(esp_lcd_touch_handle_t, uint16_t* x, uint16_t* y, uint16_t*, uint8_t* point_num,
              uint8_t) {
     for (int i = 0; i < *point_num; i++) {
@@ -81,6 +84,10 @@ void Process(esp_lcd_touch_handle_t, uint16_t* x, uint16_t* y, uint16_t*, uint8_
         if (!s_map.valid) {  // default guess is expressed in raw units directly
             sx = s_map.swap ? y[i] : x[i];
             sy = DISPLAY_HEIGHT - 1 - (s_map.swap ? x[i] : y[i]);
+        }
+        if (s_flip) {
+            sx = DISPLAY_WIDTH - 1 - sx;
+            sy = DISPLAY_HEIGHT - 1 - sy;
         }
         if (sx < 0) sx = 0;
         if (sy < 0) sy = 0;
