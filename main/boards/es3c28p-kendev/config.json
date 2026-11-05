@@ -12,7 +12,10 @@
                 "CONFIG_LV_FONT_MONTSERRAT_14=y",
                 "CONFIG_LV_FONT_MONTSERRAT_28=y",
                 "CONFIG_LV_FONT_MONTSERRAT_48=y",
-                "CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y"
+                "CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y",
+                "CONFIG_LV_USE_TILEVIEW=y",
+                "CONFIG_LV_USE_SLIDER=y",
+                "CONFIG_LV_USE_LINE=y"
             ]
         }
     ]
