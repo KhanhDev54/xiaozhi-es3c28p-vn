@@ -37,7 +37,7 @@ Firmware chatbot AI Xiaozhi **tiếng Việt** cho mạch **ESP32-S3 màn hình 
 | 😊 Icon cảm xúc | Đổi theo nội dung câu trả lời |
 | 🎵 Nhạc Việt, radio VOV | Ra lệnh bằng giọng nói |
 | 🕒 Đồng hồ + 🌤️ thời tiết + 📅 âm lịch | Tự hiện khi rảnh; có chỉ số không khí AQI |
-| 👆 Cảm ứng | Vuốt chỉnh âm lượng, độ sáng; chạm 2 lần để nói |
+| 👆 Cảm ứng | Vuốt chỉnh âm lượng, độ sáng; chạm 1 lần để nói |
 | 🧭 Dẫn đường | Google Maps trên Android → app Chronos → màn hình mạch |
 | 💰 Báo chuyển khoản | Thông báo app ngân hàng → "ting" + hiện số tiền |
 | 🔳 QR nhận tiền | VietQR, nói "hiện QR 50 nghìn" |
@@ -107,11 +107,11 @@ Lần đầu kết nối mạng, màn hình (và loa) sẽ đọc một **mã k�
 Có 3 cách bắt đầu nói chuyện:
 
 - Nói từ đánh thức **"Sophia"** (đọc *"Sô-phia"*). Nói rõ, bình thường, cách mạch khoảng 1–3 m.
-- **Chạm 2 lần** liên tiếp lên màn hình.
+- **Chạm 1 lần** lên màn hình.
 - Bấm nút **BOOT** một lần.
 
-Khi trợ lý **đang nói**: chạm 2 lần hoặc bấm BOOT để **ngắt lời**.
-Khi trợ lý **đang nghe**: chạm 2 lần hoặc bấm BOOT để **kết thúc** cuộc trò chuyện.
+Khi trợ lý **đang nói**: chạm 1 lần hoặc bấm BOOT để **ngắt lời**.
+Khi trợ lý **đang nghe**: chạm 1 lần hoặc bấm BOOT để **kết thúc** cuộc trò chuyện.
 
 Ví dụ câu lệnh: *"Hôm nay thời tiết thế nào?"*, *"Tăng âm lượng lên 80"*,
 *"Giảm độ sáng màn hình"*, *"Kể chuyện cười đi"*.
@@ -120,7 +120,7 @@ Ví dụ câu lệnh: *"Hôm nay thời tiết thế nào?"*, *"Tăng âm lượ
 
 | Thao tác | Chức năng |
 |---|---|
-| Chạm 2 lần | Bắt đầu / dừng trò chuyện |
+| Chạm 1 lần | Bắt đầu / dừng trò chuyện |
 | Vuốt **lên** | Tăng âm lượng (+5) |
 | Vuốt **xuống** | Giảm âm lượng (−5) |
 | Vuốt **phải** | Tăng độ sáng (+5) |
@@ -129,6 +129,12 @@ Ví dụ câu lệnh: *"Hôm nay thời tiết thế nào?"*, *"Tăng âm lượ
 | Nút **BOOT** 1 lần | Bắt đầu / dừng trò chuyện |
 | Nút **BOOT** 5 lần | Vào chế độ cài lại Wi-Fi |
 | Nút **RESET** | Khởi động lại mạch |
+
+> **Màn hình không nhận cảm ứng?** Khoảng 10 giây sau khi bật, máy hiện một thông báo:
+> "Cảm ứng: OK" nghĩa là đã thấy chip cảm ứng; "Không thấy chip cảm ứng (I2C 0x38)" nghĩa là
+> board không có chip cảm ứng (bản ES3N28P thường là bản **không** cảm ứng, bản có cảm ứng là ES3C28P)
+> hoặc cáp cảm ứng chưa tiếp xúc. Khi đó vẫn dùng được bằng giọng nói và nút BOOT.
+
 
 ## 8. Nghe nhạc & radio
 
@@ -234,7 +240,7 @@ Bac A Bank, ABBANK, Kienlongbank, PVcomBank. Ngân hàng khác: đọc **mã BIN
 | *"Tắt báo thức"* | Tắt chuông đang kêu |
 | *"Bật chế độ ban đêm từ 23 giờ đến 6 giờ"* | Đổi khung giờ ban đêm |
 
-- Chuông kêu tối đa **1 phút**; chạm 2 lần / bấm BOOT / bắt đầu nói chuyện để tắt.
+- Chuông kêu tối đa **1 phút**; chạm 1 lần / bấm BOOT / bắt đầu nói chuyện để tắt.
 - Báo thức lưu trong bộ nhớ mạch, **không mất khi tắt nguồn** (tối đa 8 báo thức).
 - **Chế độ ban đêm** (mặc định bật, 22h–6h): khi rảnh màn hình tự giảm còn 5% độ sáng;
   khi trò chuyện, phát nhạc, báo thức hoặc có tiền vào thì sáng lại.

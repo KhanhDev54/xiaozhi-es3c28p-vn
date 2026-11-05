@@ -179,7 +179,16 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
       ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
   }
 
-  void CheckI2CDevice(uint8_t addr, const char* name) {
+  bool CheckI2CDevice(uint8_t addr, const char* name) {
+    if (i2c_master_probe(codec_i2c_bus_, addr, 100) == ESP_OK) {
+      ESP_LOGI(TAG, "✓ Found %s at I2C address 0x%02X", name, addr);
+      return true;
+    }
+    ESP_LOGW(TAG, "✗ %s not found at I2C address 0x%02X", name, addr);
+    return false;
+  }
+
+  void CheckI2CDeviceLegacy(uint8_t addr, const char* name) {
     i2c_master_dev_handle_t dev_handle;
     i2c_device_config_t dev_cfg = {
       .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -268,7 +277,19 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
     
     // Check I2C devices
     CheckI2CDevice(0x18, "ES8311 Audio Codec");
-    CheckI2CDevice(0x38, "FT6236G Touch");
+    bool touch_found = CheckI2CDevice(TOUCH_I2C_ADDR, "FT6236G/FT6336 Touch");
+
+    // Tell the user on screen whether a touch controller exists (ES3C28P has one,
+    // the plain ES3N28P does not). Shown ~10 s after boot, once the UI is up.
+    xTaskCreate([](void* arg) {
+        bool found = (bool)(intptr_t)arg;
+        vTaskDelay(pdMS_TO_TICKS(10000));
+        auto display = Board::GetInstance().GetDisplay();
+        if (display) {
+          display->ShowNotification(found ? "Cảm ứng: OK" : "Không thấy chip cảm ứng (I2C 0x38)", 6000);
+        }
+        vTaskDelete(nullptr);
+    }, "touch_probe_msg", 3072, (void*)(intptr_t)touch_found, 2, nullptr);
     
     // Touch configuration - enable interrupt, use polling mode
     const esp_lcd_touch_config_t tp_cfg = {
@@ -330,8 +351,14 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
       ESP_LOGW(TAG, "Failed to enable touch panel point rate: %s", esp_err_to_name(ret));
     }
 
-    // Set interrupt mode
-    uint8_t int_mode_reg[1] = {0x01}; // 1 = interrupt output, 0 = polling
+    // Keep the controller active (do not drop into monitor/sleep mode), normal mode
+    uint8_t ctrl_reg[1] = {0x00};
+    esp_lcd_panel_io_tx_param(tp_io_handle, 0x86, ctrl_reg, 1);   // CTRL: stay active
+    uint8_t mode_reg[1] = {0x00};
+    esp_lcd_panel_io_tx_param(tp_io_handle, 0x00, mode_reg, 1);   // DEV_MODE: normal
+
+    // Interrupt pin mode (not used for reading any more, we poll)
+    uint8_t int_mode_reg[1] = {0x00}; // 0 = polling, 1 = trigger
     ret = esp_lcd_panel_io_tx_param(tp_io_handle, TOUCH_FT62XX_REG_INTMODE, int_mode_reg, 1);
     if (ret != ESP_OK) {
       ESP_LOGW(TAG, "Failed to enable touch panel interrupt output: %s", esp_err_to_name(ret));
@@ -341,9 +368,9 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
                           DISPLAY_WIDTH, DISPLAY_HEIGHT, 
                           DISPLAY_SWAP_XY, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
     
-    touch_->SetInterruptCallback([this]()->bool {
-        return this->WaitForTouchEvent();
-    });
+    // Poll the controller (every 10 ms in LcdTouch) instead of waiting for the INT pin:
+    // on ES3C28P boards the INT edge did not arrive reliably and the touch task blocked
+    // forever (portMAX_DELAY), so the screen looked dead.
 
     touch_->SetGestureCallback([this](TouchGesture gesture, int16_t x, int16_t y) {
       ESP_LOGI(TAG, "Touch gesture detected: %d at (%d, %d)", static_cast<int>(gesture), x, y);
@@ -429,15 +456,17 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
           }
           break;
         case TOUCH_GESTURE_TAP:
-          break;
-        case TOUCH_GESTURE_DOUBLE_TAP:
           {
+            // Single tap: start / stop chatting (stop speaking when the assistant talks)
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
               ResetWifiConfiguration();
             }
             app.ToggleChatState();
           }
+          break;
+        case TOUCH_GESTURE_DOUBLE_TAP:
+          // The first tap already toggled the chat; ignore so it is not toggled back.
           break;
         case TOUCH_GESTURE_LONG_PRESS:
           ESP_LOGW(TAG, "Long Press at (%d, %d)", x, y);
