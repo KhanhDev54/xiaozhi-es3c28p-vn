@@ -29,7 +29,7 @@ static esp_err_t ft_read_data(esp_lcd_touch_handle_t tp) {
     uint8_t data[7];
     s_reads++;
     if (s_reads % 500 == 0) {
-        ESP_LOGI(TAG, "diag: reads=%lu errors=%lu presses=%lu last_td=0x%02X",
+        ESP_LOGD(TAG, "diag: reads=%lu errors=%lu presses=%lu last_td=0x%02X",
                  (unsigned long)s_reads, (unsigned long)s_errors, (unsigned long)s_presses, s_last_td);
     }
     esp_err_t err = rd(tp, 0x00, data, sizeof(data));
@@ -41,7 +41,7 @@ static esp_err_t ft_read_data(esp_lcd_touch_handle_t tp) {
     if (data[0x02] != s_last_td) {
         if (points > 0 && (s_last_td & 0x0F) == 0) {
             s_presses++;
-            ESP_LOGI(TAG, "press raw: td=0x%02X x=%d y=%d", data[0x02],
+            ESP_LOGD(TAG, "press raw: td=0x%02X x=%d y=%d", data[0x02],
                      ((data[0x03] & 0x0F) << 8) | data[0x04], ((data[0x05] & 0x0F) << 8) | data[0x06]);
         }
         s_last_td = data[0x02];

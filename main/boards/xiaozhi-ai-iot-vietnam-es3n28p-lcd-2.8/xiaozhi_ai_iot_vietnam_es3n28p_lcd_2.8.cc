@@ -510,7 +510,8 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
   }
 
   void InitializeTools() {
-    static LampController lamp(BUILTIN_LED_GPIO);
+    // No lamp on this board (GPIO42 is not a lamp): the fork's LampController
+    // only added fake self.lamp.* tools for the AI, so it is not registered.
   }
 
 #ifdef CONFIG_PHONE_NAVIGATION_ENABLE
