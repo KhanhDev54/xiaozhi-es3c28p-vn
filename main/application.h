@@ -49,6 +49,12 @@ enum AecMode {
 
 class Application {
 public:
+    // Keep the full-screen idle (weather/clock) card hidden for a few seconds so that
+    // notifications such as "Âm lượng 70" are visible (touch gestures, buttons).
+    void SuppressIdleCard(int seconds = 4) {
+        idle_card_suppress_until_us_ = esp_timer_get_time() + (int64_t)seconds * 1000000;
+    }
+    bool IdleCardSuppressed() const { return esp_timer_get_time() < idle_card_suppress_until_us_; }
     static Application& GetInstance() {
         static Application instance;
         return instance;
@@ -201,6 +207,7 @@ private:
     std::deque<std::function<void()>> main_tasks_;
     std::unique_ptr<Protocol> protocol_;
     EventGroupHandle_t event_group_ = nullptr;
+    volatile int64_t idle_card_suppress_until_us_ = 0;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
