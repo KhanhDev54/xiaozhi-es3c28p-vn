@@ -38,6 +38,17 @@ public:
     void StopRinging();
     bool IsRinging() const { return ringing_; }
     void SetNightMode(bool enabled, int start_hour, int end_hour);
+    bool night_enabled() const { return night_enabled_; }
+    int night_start() const { return night_start_; }
+    int night_end() const { return night_end_; }
+    bool IsNightActive() const { return night_active_; }
+    // Ban đêm app: force the night screen on until a tap (or off)
+    void ForceNight(bool on);
+    void Snooze(int minutes);
+    bool SetAlarmEnabled(int index, bool enabled);
+    std::string ring_title();
+    std::string ring_label();
+    std::string timer_label();
     // Keep the screen at normal brightness for a while (e.g. new bank alert)
     void WakeScreen(int seconds);
 
@@ -67,6 +78,9 @@ private:
     int night_end_ = 6;
     bool night_active_ = false;
     int64_t wake_until_us_ = 0;
+    bool night_forced_ = false;
+    std::string ring_title_;
+    std::string ring_label_;
 };
 
 #endif  // ALARM_MANAGER_H

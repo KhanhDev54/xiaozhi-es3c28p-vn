@@ -149,7 +149,48 @@ void AlarmManager::StopRinging() {
     if (!ringing_) return;
     ringing_ = false;
     ring_seconds_ = 0;
-    Application::GetInstance().Schedule([]() { Application::GetInstance().DismissAlert(); });
+}
+
+void AlarmManager::Snooze(int minutes) {
+    std::string label = ring_label();
+    StopRinging();
+    StartTimer(minutes * 60, label.empty() ? "Báo lại" : label);
+}
+
+bool AlarmManager::SetAlarmEnabled(int index, bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (index < 0 || index >= (int)alarms_.size()) return false;
+    alarms_[index].enabled = enabled;
+    Save();
+    return true;
+}
+
+std::string AlarmManager::ring_title() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return ring_title_;
+}
+
+std::string AlarmManager::ring_label() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return ring_label_;
+}
+
+std::string AlarmManager::timer_label() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return timer_label_;
+}
+
+void AlarmManager::ForceNight(bool on) {
+    auto* bl = Board::GetInstance().GetBacklight();
+    night_forced_ = on;
+    if (on) {
+        wake_until_us_ = 0;
+        if (bl) bl->SetBrightness(kNightBrightness, false);
+        night_active_ = true;
+    } else if (night_active_) {
+        if (bl) bl->RestoreBrightness();
+        night_active_ = false;
+    }
 }
 
 // ---------------------------------------------------------------- runtime
@@ -161,13 +202,28 @@ void AlarmManager::Ring(const std::string& title, const std::string& label) {
     // Wake the screen up
     if (auto* bl = Board::GetInstance().GetBacklight()) bl->RestoreBrightness();
     night_active_ = false;
-    std::string t = title, l = label;
-    Application::GetInstance().Schedule([t, l]() {
-        Application::GetInstance().Alert(t.c_str(), l.c_str(), "surprised", Lang::Sounds::OGG_VIBRATION);
+    night_forced_ = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ring_title_ = title;
+        ring_label_ = label;
+    }
+    // The launcher shows the ring screen (Báo lại / Tắt); just play the sound here
+    Application::GetInstance().Schedule([]() {
+        Application::GetInstance().PlaySound(Lang::Sounds::OGG_VIBRATION);
     });
 }
 
 void AlarmManager::UpdateNightMode(int hour) {
+    if (night_forced_) {
+        // Manual night screen: leave it when the user wakes the screen or a conversation starts
+        if (esp_timer_get_time() < wake_until_us_ ||
+            Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+            night_forced_ = false;
+        } else {
+            return;
+        }
+    }
     if (!night_enabled_ && !night_active_) return;
     auto* bl = Board::GetInstance().GetBacklight();
     if (!bl) return;

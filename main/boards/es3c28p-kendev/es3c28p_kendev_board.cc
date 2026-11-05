@@ -13,6 +13,7 @@
 
 #include "alarm_manager.h"
 #include "ft6336_touch.h"
+#include "bank_store.h"
 #include "info_services.h"
 #include "launcher.h"
 #include "radio_player.h"
@@ -53,12 +54,38 @@ static const ili9341_lcd_init_cmd_t vendor_specific_init[] = {
     {0, (uint8_t []){0}, 0x29, 0},
 };
 
+// WS2812 that shows the user's colour (Điều khiển → Đèn LED) while idle
+class KendevLed : public CircularStrip {
+public:
+    KendevLed(gpio_num_t gpio) : CircularStrip(gpio, 1) {}
+    void SetIdleColor(int index) {
+        color_index_ = index;
+        OnStateChanged();
+    }
+    void OnStateChanged() override {
+        auto state = Application::GetInstance().GetDeviceState();
+        if (state == kDeviceStateIdle && color_index_ > 0) {
+            uint32_t rgb = Launcher::LedColor(color_index_);
+            // keep it dim: scale 0..255 down to ~0..40
+            StripColor c = {(uint8_t)(((rgb >> 16) & 0xFF) * 40 / 255), (uint8_t)(((rgb >> 8) & 0xFF) * 40 / 255),
+                            (uint8_t)((rgb & 0xFF) * 40 / 255)};
+            SetAllColor(c);
+            return;
+        }
+        CircularStrip::OnStateChanged();
+    }
+
+private:
+    int color_index_ = 0;
+};
+
 class Es3c28pKendevBoard : public WifiBoard {
 private:
     i2c_master_bus_handle_t i2c_bus_;
     Button boot_button_;
     LcdDisplay* display_ = nullptr;
     esp_lcd_touch_handle_t touch_ = nullptr;
+    esp_lcd_panel_handle_t panel_ = nullptr;
 
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
@@ -139,6 +166,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_disp_on_off(panel, true);
+        panel_ = panel;
 
         display_ = new SpiLcdDisplay(panel_io, panel,
             DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
@@ -209,11 +237,18 @@ public:
         InitializeButtons();
         InitializeTools();
         GetBacklight()->RestoreBrightness();
-        Launcher::GetInstance().Start(display_, GetBacklight());
+        auto& launcher = Launcher::GetInstance();
+        launcher.SetHandlers(
+            [this](bool flip) {
+                // 180° = mirror both axes (the panel is already in swap_xy landscape)
+                if (panel_) esp_lcd_panel_mirror(panel_, DISPLAY_MIRROR_X != flip, DISPLAY_MIRROR_Y != flip);
+            },
+            [this](int index) { static_cast<KendevLed*>(GetLed())->SetIdleColor(index); });
+        launcher.Start(display_, GetBacklight());
     }
 
     virtual Led* GetLed() override {
-        static CircularStrip led(BUILTIN_LED_GPIO, 1);
+        static KendevLed led(BUILTIN_LED_GPIO);
         return &led;
     }
 
