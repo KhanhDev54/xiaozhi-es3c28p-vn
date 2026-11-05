@@ -15,7 +15,7 @@ cảm ứng điện dung FT6336G, loa ES8311), giao diện tiếng Việt kiểu
 1. Mở trang nạp: <https://khanhdev54.github.io/xiaozhi-es3c28p-vn/> bằng Chrome/Edge trên máy tính.
 2. Cắm mạch bằng cáp USB-C có truyền dữ liệu, bấm **Kết nối**, chọn cổng COM.
 3. Chọn **KenDev 2.8" ES3C28P (cảm ứng)**, bật **Xoá toàn bộ flash** (lần đầu), bấm **Bắt đầu nạp**.
-4. Lần đầu bật: điện thoại vào Wi-Fi `Xiaozhi-xxxx`, mở `192.168.4.1` để cài mạng (thẻ **Tùy chỉnh**:
+4. Lần đầu bật: điện thoại vào Wi-Fi `KenDev-xxxx`, mở `192.168.4.1` để cài mạng (thẻ **Tùy chỉnh**:
    thành phố thời tiết, âm lượng, giờ ban đêm).
 
 Trang nạp còn có: **Xem log của mạch**, **Gỡ liên kết thiết bị** (lấy MAC + soạn email gửi Xiaozhi),
