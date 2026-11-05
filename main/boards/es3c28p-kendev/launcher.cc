@@ -1584,7 +1584,7 @@ void Launcher::AppTimer() {
         lv_obj_align(l, LV_ALIGN_LEFT_MID, 10, 0);
         static const int kPresets[] = {1, 5, 10, 30};
         for (int i = 0; i < 4; i++) {
-            char txt[8];
+            char txt[16];
             snprintf(txt, sizeof(txt), "%d'", kPresets[i]);
             lv_obj_t* b = Button(box, 112 + i * 49, 6, 45, 36, txt, kCard2, kText, [](lv_event_t* e) {
                 auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
@@ -1698,7 +1698,7 @@ void Launcher::AppHistory() {
     lv_obj_set_pos(title, 10, 3);
     struct tm tmv = Now();
     int prev_month = tmv.tm_mon == 0 ? 12 : tmv.tm_mon;
-    char t1[16], t2[16];
+    char t1[24], t2[24];
     snprintf(t1, sizeof(t1), "Tháng %d", tmv.tm_mon + 1);
     snprintf(t2, sizeof(t2), "Tháng %d", prev_month);
     const char* tabs[3] = {"Hôm nay", t1, t2};
