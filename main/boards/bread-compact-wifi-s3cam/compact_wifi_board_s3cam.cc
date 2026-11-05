@@ -10,19 +10,12 @@
 #include "led/single_led.h"
 #include "esp32_camera.h"
 
-#include <wifi_station.h>
 #include <esp_log.h>
 #include <driver/i2c_master.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <driver/spi_common.h>
-
-#ifdef CONFIG_SD_CARD_MMC_INTERFACE
-#include "sdmmc.h"
-#elif defined(CONFIG_SD_CARD_SPI_INTERFACE)
-#include "sdspi.h"
-#endif
 
 #if defined(LCD_TYPE_ILI9341_SERIAL)
 #include "esp_lcd_ili9341.h"
@@ -71,9 +64,12 @@ class CompactWifiBoardS3Cam : public WifiBoard {
 private:
  
     Button boot_button_;
+#ifndef CONFIG_BREAD_COMPACT_WIFI_CAM_DISABLE_LCD
     LcdDisplay* display_;
-     Esp32Camera* camera_;
+#endif
+    Esp32Camera* camera_;
 
+#ifndef CONFIG_BREAD_COMPACT_WIFI_CAM_DISABLE_LCD
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = DISPLAY_MOSI_PIN;
@@ -131,60 +127,43 @@ private:
                                     DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
+#endif
+
     void InitializeCamera() {
-        static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
-            .data_width = CAM_CTLR_DATA_WIDTH_8,
-            .data_io = {
-                [0] = CAMERA_PIN_D0,
-                [1] = CAMERA_PIN_D1,
-                [2] = CAMERA_PIN_D2,
-                [3] = CAMERA_PIN_D3,
-                [4] = CAMERA_PIN_D4,
-                [5] = CAMERA_PIN_D5,
-                [6] = CAMERA_PIN_D6,
-                [7] = CAMERA_PIN_D7,
-            },
-            .vsync_io = CAMERA_PIN_VSYNC,
-            .de_io = CAMERA_PIN_HREF,
-            .pclk_io = CAMERA_PIN_PCLK,
-            .xclk_io = CAMERA_PIN_XCLK,
-        };
-
-        esp_video_init_sccb_config_t sccb_config = {
-            .init_sccb = true,
-            .i2c_config = {
-                .port = 0,
-                .scl_pin = CAMERA_PIN_SIOC,
-                .sda_pin = CAMERA_PIN_SIOD,
-            },
-            .freq = 100000,
-        };
-
-        esp_video_init_dvp_config_t dvp_config = {
-            .sccb_config = sccb_config,
-            .reset_pin = CAMERA_PIN_RESET,
-            .pwdn_pin = CAMERA_PIN_PWDN,
-            .dvp_pin = dvp_pin_config,
-            .xclk_freq = XCLK_FREQ_HZ,
-        };
-
-        esp_video_init_config_t video_config = {
-            .dvp = &dvp_config,
-        };
-
-        camera_ = new Esp32Camera(video_config);
-        camera_->SetHMirror(false);
+        camera_config_t config = {};
+        config.pin_d0 = CAMERA_PIN_D0;
+        config.pin_d1 = CAMERA_PIN_D1;
+        config.pin_d2 = CAMERA_PIN_D2;
+        config.pin_d3 = CAMERA_PIN_D3;
+        config.pin_d4 = CAMERA_PIN_D4;
+        config.pin_d5 = CAMERA_PIN_D5;
+        config.pin_d6 = CAMERA_PIN_D6;
+        config.pin_d7 = CAMERA_PIN_D7;
+        config.pin_xclk = CAMERA_PIN_XCLK;
+        config.pin_pclk = CAMERA_PIN_PCLK;
+        config.pin_vsync = CAMERA_PIN_VSYNC;
+        config.pin_href = CAMERA_PIN_HREF;
+        config.pin_sccb_sda = CAMERA_PIN_SIOD;
+        config.pin_sccb_scl = CAMERA_PIN_SIOC;
+        config.sccb_i2c_port = 0;
+        config.pin_pwdn = CAMERA_PIN_PWDN;
+        config.pin_reset = CAMERA_PIN_RESET;
+        config.xclk_freq_hz = XCLK_FREQ_HZ;
+        config.pixel_format = PIXFORMAT_RGB565;
+        config.frame_size = FRAMESIZE_VGA;
+        config.jpeg_quality = 12;
+        config.fb_count = 1;
+        config.fb_location = CAMERA_FB_IN_PSRAM;
+        config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+        camera_ = new Esp32Camera(config);
     }
 
     void InitializeButtons() {
-        boot_button_.OnMultipleClick([this]() {
-            ResetWifiConfiguration();
-        }, 5);
-
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });
@@ -193,14 +172,18 @@ private:
 public:
     CompactWifiBoardS3Cam() :
         boot_button_(BOOT_BUTTON_GPIO) {
+#ifndef CONFIG_BREAD_COMPACT_WIFI_CAM_DISABLE_LCD
         InitializeSpi();
         InitializeLcdDisplay();
+#endif
         InitializeButtons();
         InitializeCamera();
+#ifndef CONFIG_BREAD_COMPACT_WIFI_CAM_DISABLE_LCD
         if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
             GetBacklight()->RestoreBrightness();
         }
-        
+#endif
+
     }
 
     virtual Led* GetLed() override {
@@ -219,6 +202,7 @@ public:
         return &audio_codec;
     }
 
+#ifndef CONFIG_BREAD_COMPACT_WIFI_CAM_DISABLE_LCD
     virtual Display* GetDisplay() override {
         return display_;
     }
@@ -230,37 +214,11 @@ public:
         }
         return nullptr;
     }
+#endif
 
     virtual Camera* GetCamera() override {
         return camera_;
     }
-
-#ifdef CONFIG_SD_CARD_MMC_INTERFACE
-    virtual SdCard* GetSdCard() override {
-#ifdef CARD_SDMMC_BUS_WIDTH_4BIT
-        static SdMMC sdmmc(CARD_SDMMC_CLK_GPIO,
-                           CARD_SDMMC_CMD_GPIO,
-                           CARD_SDMMC_D0_GPIO,
-                           CARD_SDMMC_D1_GPIO,
-                           CARD_SDMMC_D2_GPIO,
-                           CARD_SDMMC_D3_GPIO);
-#else
-        static SdMMC sdmmc(CARD_SDMMC_CLK_GPIO,
-                           CARD_SDMMC_CMD_GPIO,
-                           CARD_SDMMC_D0_GPIO);
-#endif
-        return &sdmmc;
-    }
-#endif
-#ifdef CONFIG_SD_CARD_SPI_INTERFACE
-    virtual SdCard* GetSdCard() override {
-        static SdSPI sdspi(CARD_SPI_MISO_GPIO,
-                           CARD_SPI_MOSI_GPIO,
-                           CARD_SPI_SCLK_GPIO,
-                           CARD_SPI_CS_GPIO);
-        return &sdspi;
-    }
-#endif
 };
 
 DECLARE_BOARD(CompactWifiBoardS3Cam);

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KenDev · Cài đặt thiết bị</title>
+<style>
+:root{--bg:#0b1020;--card:#141b2e;--line:#243049;--text:#e7ecf6;--muted:#93a0b8;--accent:#4f8cff;--accent2:#7c5cff;--ok:#34d399;--err:#f87171;--field:#0f1526}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+body{min-height:100vh;background:radial-gradient(1200px 500px at 50% -200px,#1d2a55 0,transparent 70%),var(--bg)}
+.wrap{max-width:460px;margin:0 auto;padding:18px 16px 40px}
+.brand{display:flex;align-items:center;gap:12px;margin:6px 2px 18px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;box-shadow:0 6px 20px #4f8cff40}
+.logo svg{width:24px;height:24px}
+.brand h1{font-size:19px;margin:0;letter-spacing:.2px}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);font-family:inherit;font-weight:600;font-size:14px;line-height:1;padding:10px 6px;border-radius:9px;cursor:pointer}
+.tabs button.on{background:#22305a;color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.pane{display:none}.pane.on{display:block}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+input[type=text],input[type=password],select{width:100%;background:var(--field);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:12px;font-size:16px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+.pw{position:relative}.pw input{padding-right:64px}
+.pw button{position:absolute;right:6px;top:6px;bottom:6px;border:0;background:#22305a;color:#cfd8ea;border-radius:8px;padding:0 10px;font-size:12px}
+.btn{display:block;width:100%;margin-top:16px;border:0;border-radius:12px;padding:13px;font-family:inherit;font-weight:700;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));cursor:pointer}
+.btn:disabled{opacity:.55}
+.list{list-style:none;margin:0;padding:0}
+.ap{display:flex;align-items:center;gap:10px;padding:11px 10px;border-radius:10px;cursor:pointer}
+.ap:hover,.ap.sel{background:#1c2643}
+.ap .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ap .lock{color:var(--muted);font-size:12px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:14px}
+.bars i{width:4px;background:#334;border-radius:1px}
+.bars i.f{background:var(--ok)}
+.saved{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.saved:last-child{border-bottom:0}
+.saved .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{border:1px solid var(--line);background:none;color:#cfd8ea;border-radius:999px;padding:5px 10px;font-size:12px}
+.chip.del{color:var(--err);border-color:#5a2b33}
+.tag{font-size:11px;color:var(--ok);border:1px solid #1f5f4a;border-radius:999px;padding:2px 8px}
+.hint{color:var(--muted);font-size:12.5px;margin:6px 0 0}
+.err{color:var(--err);font-size:13.5px;min-height:1px;margin:8px 0 0}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
+.switch span{font-size:14px}
+.tg{position:relative;width:46px;height:26px;flex:none}
+.tg input{opacity:0;width:0;height:0}
+.tg b{position:absolute;inset:0;background:#2a3554;border-radius:99px;transition:.2s}
+.tg b:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.tg input:checked+b{background:var(--accent)}
+.tg input:checked+b:before{transform:translateX(20px)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.vol{display:flex;align-items:center;gap:12px}.vol output{min-width:38px;text-align:right;font-weight:700}
+.scan{color:var(--muted);font-size:13px;padding:8px 10px}
+.overlay{position:fixed;inset:0;background:#0b1020e6;display:none;place-items:center;z-index:9}
+.overlay.on{display:grid}
+.spin{width:44px;height:44px;border-radius:50%;border:4px solid #2a3554;border-top-color:var(--accent);animation:r 1s linear infinite;margin:0 auto 12px}
+@keyframes r{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);background:#1f2b4d;border:1px solid var(--line);padding:10px 16px;border-radius:10px;transition:.25s;opacity:0}
+.toast.on{transform:translateX(-50%);opacity:1}
+.foot{text-align:center;color:#5d6a84;font-size:12px;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="#fff"/></svg></div>
+    <div><h1>KenDev · Xiaozhi</h1><p>Cài đặt thiết bị</p></div>
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-tab="wifi">Wi-Fi</button>
+    <button data-tab="custom">Tùy chỉnh</button>
+    <button data-tab="adv">Nâng cao</button>
+  </div>
+
+  <!-- Wi-Fi -->
+  <div class="pane on" id="p-wifi">
+    <div class="card" id="savedCard" style="display:none">
+      <h2>Wi-Fi đã lưu</h2>
+      <ul class="list" id="saved"></ul>
+    </div>
+    <div class="card">
+      <h2>Kết nối Wi-Fi mới</h2>
+      <form id="wifiForm" autocomplete="off">
+        <label for="ssid">Tên Wi-Fi (SSID)</label>
+        <input type="text" id="ssid" maxlength="32" placeholder="Chọn bên dưới hoặc nhập tên" readonly>
+        <label for="password">Mật khẩu</label>
+        <div class="pw"><input type="password" id="password" maxlength="64" placeholder="Để trống nếu Wi-Fi không có mật khẩu"><button type="button" id="pwToggle">Hiện</button></div>
+        <p class="err" id="wifiErr"></p>
+        <button class="btn" id="connectBtn" type="submit">Kết nối</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2 id="apTitle">Mạng xung quanh</h2>
+      <ul class="list" id="aps"><li class="scan">Đang quét…</li></ul>
+      <p class="hint">Chỉ hỗ trợ Wi-Fi 2.4 GHz. Danh sách tự cập nhật mỗi 5 giây.</p>
+    </div>
+  </div>
+
+  <!-- Custom -->
+  <div class="pane" id="p-custom">
+    <div class="card">
+      <h2>Thời tiết</h2>
+      <label for="city">Thành phố</label>
+      <input type="text" id="city" maxlength="58" placeholder="Ví dụ: Hà Nội, Đà Nẵng, Cần Thơ">
+      <p class="hint">Để trống thì tự đoán vị trí theo mạng Internet.</p>
+    </div>
+    <div class="card">
+      <h2>Âm thanh</h2>
+      <label for="volume">Âm lượng khi khởi động</label>
+      <div class="vol"><input type="range" id="volume" min="10" max="100" step="5" value="70"><output id="volOut">70</output></div>
+    </div>
+    <div class="card">
+      <h2>Màn hình ban đêm</h2>
+      <div class="switch" style="margin-top:0"><span>Tự giảm độ sáng màn hình</span><label class="tg"><input type="checkbox" id="nightOn" checked><b></b></label></div>
+      <div class="row">
+        <div><label for="nightStart">Từ</label><select id="nightStart"></select></div>
+        <div><label for="nightEnd">Đến</label><select id="nightEnd"></select></div>
+      </div>
+    </div>
+    <p class="err" id="customErr"></p>
+    <button class="btn" id="customBtn" type="button">Lưu tùy chỉnh</button>
+    <p class="hint" style="text-align:center">Có hiệu lực sau khi thiết bị khởi động lại.</p>
+  </div>
+
+  <!-- Advanced -->
+  <div class="pane" id="p-adv">
+    <div class="card">
+      <h2>Nâng cao</h2>
+      <div id="otaRow" style="display:none">
+        <label for="ota">Địa chỉ OTA tùy chỉnh</label>
+        <input type="text" id="ota" placeholder="Để trống để dùng mặc định">
+      </div>
+      <label for="txp">Công suất phát Wi-Fi tối đa</label>
+      <select id="txp">
+        <option value="34">8 dBm</option><option value="44">11 dBm</option><option value="52">13 dBm</option>
+        <option value="60">15 dBm</option><option value="66">16 dBm</option><option value="72">18 dBm</option>
+        <option value="80">20 dBm</option>
+      </select>
+      <div class="switch"><span>Ghi nhớ BSSID khi kết nối</span><label class="tg"><input type="checkbox" id="bssid"><b></b></label></div>
+      <div class="switch" id="sleepRow" style="display:none"><span>Chế độ tiết kiệm điện</span><label class="tg"><input type="checkbox" id="sleep"><b></b></label></div>
+      <p class="err" id="advErr"></p>
+      <button class="btn" id="advBtn" type="button">Lưu</button>
+    </div>
+  </div>
+
+  <p class="foot">Firmware KenDev · dựa trên Xiaozhi (MIT)</p>
+</div>
+
+<div class="overlay" id="overlay"><div style="text-align:center"><div class="spin"></div><div>Đang kết nối Wi-Fi…</div><div class="hint">Có thể mất tới 20 giây</div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+var $=function(id){return document.getElementById(id)};
+var ssid=$('ssid'),busy=false;
+function toast(t){var e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2500)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function bars(rssi){var n=rssi>-55?4:rssi>-67?3:rssi>-78?2:1,h='';for(var i=1;i<=4;i++)h+='<i class="'+(i<=n?'f':'')+'" style="height:'+(i*3+2)+'px"></i>';return '<span class="bars">'+h+'</span>'}
+
+document.querySelectorAll('.tabs button').forEach(function(b){b.onclick=function(){
+  document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('on')});
+  document.querySelectorAll('.pane').forEach(function(x){x.classList.remove('on')});
+  b.classList.add('on');$('p-'+b.dataset.tab).classList.add('on')}});
+
+$('pwToggle').onclick=function(){var p=$('password');var s=p.type==='password';p.type=s?'text':'password';this.textContent=s?'Ẩn':'Hiện'};
+// The SSID field stays read-only until tapped, so captive-portal webviews do not pop the keyboard on load
+ssid.addEventListener('pointerdown',function(){ssid.removeAttribute('readonly')});
+
+function loadSaved(){fetch('/saved/list').then(function(r){return r.json()}).then(function(list){
+  var ul=$('saved');ul.innerHTML='';
+  list.forEach(function(name,i){var li=document.createElement('li');li.className='saved';
+    li.innerHTML='<span class="name">'+esc(name)+'</span>'+(i===0?'<span class="tag">Ưu tiên</span>':'<button class="chip" data-a="def">Ưu tiên</button>')+'<button class="chip del" data-a="del">Xóa</button>';
+    li.querySelectorAll('button').forEach(function(b){b.onclick=function(){b.disabled=true;
+      fetch('/saved/'+(b.dataset.a==='del'?'delete':'set_default')+'?index='+i).then(loadSaved)}});
+    ul.appendChild(li)});
+  $('savedCard').style.display=list.length?'block':'none'}).catch(function(){})}
+
+function loadAps(){if(busy)return setTimeout(loadAps,5000);
+  fetch('/scan').then(function(r){return r.json()}).then(function(d){
+    var ul=$('aps');ul.innerHTML='';
+    if(d.support_5g)$('apTitle').textContent='Mạng xung quanh (2.4 & 5 GHz)';
+    if(!d.aps.length)ul.innerHTML='<li class="scan">Chưa thấy mạng nào…</li>';
+    d.aps.forEach(function(ap){if(!ap.ssid)return;var li=document.createElement('li');li.className='ap'+(ap.ssid===ssid.value?' sel':'');
+      li.innerHTML=bars(ap.rssi)+'<span class="name">'+esc(ap.ssid)+'</span><span class="lock">'+(ap.authmode===0?'Mở':'🔒')+'</span>';
+      li.onclick=function(){ssid.value=ap.ssid;document.querySelectorAll('.ap').forEach(function(x){x.classList.remove('sel')});li.classList.add('sel');$('password').focus()};
+      ul.appendChild(li)});
+    setTimeout(loadAps,5000)}).catch(function(){setTimeout(loadAps,5000)})}
+
+$('wifiForm').onsubmit=function(e){e.preventDefault();
+  if(!ssid.value){$('wifiErr').textContent='Hãy chọn hoặc nhập tên Wi-Fi';return}
+  busy=true;$('wifiErr').textContent='';$('connectBtn').disabled=true;$('overlay').classList.add('on');
+  fetch('/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid.value,password:$('password').value})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(!d.success)throw new Error(d.error==='Failed to connect to the Access Point'?'Không kết nối được. Kiểm tra lại mật khẩu hoặc đứng gần router hơn.':(d.error||'Kết nối thất bại'));
+    location.href='/done.html'})
+  .catch(function(err){$('overlay').classList.remove('on');$('wifiErr').textContent=err.message;$('connectBtn').disabled=false;busy=false})};
+
+// Custom settings
+for(var h=0;h<24;h++){var t=(h<10?'0':'')+h+':00';$('nightStart').add(new Option(t,h));$('nightEnd').add(new Option(t,h))}
+$('volume').oninput=function(){$('volOut').textContent=this.value};
+fetch('/custom/config').then(function(r){return r.json()}).then(function(c){
+  $('city').value=c.weather_city&&c.weather_city!=='auto'?c.weather_city:'';
+  $('volume').value=c.volume||70;$('volOut').textContent=$('volume').value;
+  $('nightOn').checked=!!c.night_on;$('nightStart').value=c.night_start;$('nightEnd').value=c.night_end}).catch(function(){});
+$('customBtn').onclick=function(){var b=this;b.disabled=true;$('customErr').textContent='';
+  fetch('/custom/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    weather_city:$('city').value.trim(),volume:+$('volume').value,night_on:$('nightOn').checked,
+    night_start:+$('nightStart').value,night_end:+$('nightEnd').value})})
+  .then(function(r){return r.json()}).then(function(d){if(!d.success)throw new Error(d.error||'Lưu thất bại');toast('Đã lưu tùy chỉnh')})
+  .catch(function(e){$('customErr').textContent=e.message}).then(function(){b.disabled=false})};
+
+// Advanced
+fetch('/advanced/config').then(function(r){return r.json()}).then(function(c){
+  $('otaRow').style.display=c.show_ota_config?'block':'none';$('sleepRow').style.display=c.show_sleep_config?'flex':'none';
+  if(c.ota_url)$('ota').value=c.ota_url;if(c.max_tx_power)$('txp').value=c.max_tx_power;
+  $('bssid').checked=!!c.remember_bssid;$('sleep').checked=!!c.sleep_mode}).catch(function(){});
+$('advBtn').onclick=function(){var b=this;b.disabled=true;$('advErr').textContent='';
+  fetch('/advanced/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    ota_url:$('ota').value.trim(),max_tx_power:+$('txp').value,remember_bssid:$('bssid').checked,sleep_mode:$('sleep').checked})})
+  .then(function(r){return r.json()}).then(function(d){if(!d.success)throw new Error(d.error||'Lưu thất bại');toast('Đã lưu')})
+  .catch(function(e){$('advErr').textContent=e.message}).then(function(){b.disabled=false})};
+
+loadSaved();loadAps();
+window.addEventListener('pageshow',function(e){if(e.persisted)loadSaved()});
+</script>
+</body>
+</html>

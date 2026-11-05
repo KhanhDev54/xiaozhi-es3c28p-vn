@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Wi-Fiに切り替え中...",
         "SWITCH_TO_4G_NETWORK": "4Gに切り替え中...",
         "STANDBY": "待機中",
+        "WAKE_WORD_HINT": "「%s」と呼びかけて起こしてください。",
         "CONNECT_TO": "接続先 ",
         "CONNECTING": "接続中...",
         "CONNECTED_TO": "接続完了 ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "アセットを読み込み中...",
         "PLEASE_WAIT": "お待ちください...",
         "FOUND_NEW_ASSETS": "新しいアセットが見つかりました: %s",
-        "HELLO_MY_FRIEND": "こんにちは、友達！"
+        "HELLO_MY_FRIEND": "こんにちは、友達！",
+        "CONNECTION_SUCCESSFUL": "接続成功",
+        "FLIGHT_MODE_OFF": "機内モードがオフです",
+        "FLIGHT_MODE_ON": "機内モードがオンです",
+        "MODEM_INIT_ERROR": "モデムの初期化に失敗しました"
     }
 }

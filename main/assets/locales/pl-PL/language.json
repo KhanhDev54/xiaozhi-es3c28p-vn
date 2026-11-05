@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Przełączanie na Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "Przełączanie na 4G...",
         "STANDBY": "Gotowość",
+        "WAKE_WORD_HINT": "Powiedz „%s”, aby mnie obudzić.",
         "CONNECT_TO": "Połącz z ",
         "CONNECTING": "Łączenie...",
         "CONNECTED_TO": "Połączono z ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "Ładowanie zasobów...",
         "PLEASE_WAIT": "Proszę czekać...",
         "FOUND_NEW_ASSETS": "Znaleziono nowe zasoby: %s",
-        "HELLO_MY_FRIEND": "Cześć, mój przyjacielu!"
+        "HELLO_MY_FRIEND": "Cześć, mój przyjacielu!",
+        "CONNECTION_SUCCESSFUL": "Połączenie udane",
+        "FLIGHT_MODE_OFF": "Tryb samolotowy jest wyłączony",
+        "FLIGHT_MODE_ON": "Tryb samolotowy jest włączony",
+        "MODEM_INIT_ERROR": "Inicjalizacja modemu nie powiodła się"
     }
 }

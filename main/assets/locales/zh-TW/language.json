@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "切換到 Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "切換到 4G...",
         "STANDBY": "待命",
+        "WAKE_WORD_HINT": "說「%s」就能喚醒我。",
         "CONNECT_TO": "連接 ",
         "CONNECTING": "連接中...",
         "CONNECTED_TO": "已連接 ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "載入資源...",
         "PLEASE_WAIT": "請稍候...",
         "FOUND_NEW_ASSETS": "發現新資源: %s",
-        "HELLO_MY_FRIEND": "你好，我的朋友！"
+        "HELLO_MY_FRIEND": "你好，我的朋友！",
+        "CONNECTION_SUCCESSFUL": "連線成功",
+        "FLIGHT_MODE_OFF": "飛航模式已關閉",
+        "FLIGHT_MODE_ON": "飛航模式已開啟",
+        "MODEM_INIT_ERROR": "模組初始化失敗"
     }
 }

@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "التبديل إلى Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "التبديل إلى 4G...",
         "STANDBY": "في الانتظار",
+        "WAKE_WORD_HINT": "يمكنك إيقاظي بقول «%s».",
         "CONNECT_TO": "الاتصال بـ ",
         "CONNECTING": "جاري الاتصال...",
         "CONNECTED_TO": "متصل بـ ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "جاري تحميل الموارد...",
         "PLEASE_WAIT": "يرجى الانتظار...",
         "FOUND_NEW_ASSETS": "تم العثور على موارد جديدة: %s",
-        "HELLO_MY_FRIEND": "مرحباً، صديقي!"
+        "HELLO_MY_FRIEND": "مرحباً، صديقي!",
+        "CONNECTION_SUCCESSFUL": "تم الاتصال بنجاح",
+        "FLIGHT_MODE_OFF": "وضع الطيران معطل",
+        "FLIGHT_MODE_ON": "وضع الطيران قيد التشغيل",
+        "MODEM_INIT_ERROR": "فشل تهيئة المودم"
     }
 }

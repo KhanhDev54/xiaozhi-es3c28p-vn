@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Byter till Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "Byter till 4G...",
         "STANDBY": "Standby",
+        "WAKE_WORD_HINT": "Säg \"%s\" för att väcka mig.",
         "CONNECT_TO": "Anslut till ",
         "CONNECTING": "Ansluter...",
         "CONNECTION_SUCCESSFUL": "Anslutningen lyckades",
@@ -51,7 +52,9 @@
         "FOUND_NEW_ASSETS": "Hittade nya resurser: %s",
         "DOWNLOAD_ASSETS_FAILED": "Nedladdning av resurser misslyckades",
         "LOADING_ASSETS": "Laddar resurser...",
-        "HELLO_MY_FRIEND": "Hej, min vän!"
+        "HELLO_MY_FRIEND": "Hej, min vän!",
+        "FLIGHT_MODE_OFF": "Flygläge är av",
+        "FLIGHT_MODE_ON": "Flygläge är på",
+        "MODEM_INIT_ERROR": "Modeminitiering misslyckades"
     }
 }
-

@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Превключване към Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "Превключване към 4G...",
         "STANDBY": "Режим на готовност",
+        "WAKE_WORD_HINT": "Кажете „%s“, за да ме събудите.",
         "CONNECT_TO": "Свързване към ",
         "CONNECTING": "Свързване...",
         "CONNECTION_SUCCESSFUL": "Успешно свързване",
@@ -51,7 +52,9 @@
         "FOUND_NEW_ASSETS": "Намерени нови ресурси: %s",
         "DOWNLOAD_ASSETS_FAILED": "Неуспешно изтегляне на ресурси",
         "LOADING_ASSETS": "Зареждане на ресурси...",
-        "HELLO_MY_FRIEND": "Здравей, мой приятел!"
+        "HELLO_MY_FRIEND": "Здравей, мой приятел!",
+        "FLIGHT_MODE_OFF": "Режим на самолет е изключен",
+        "FLIGHT_MODE_ON": "Режим на самолет е включен",
+        "MODEM_INIT_ERROR": "Неуспешна инициализация на модема"
     }
 }
-

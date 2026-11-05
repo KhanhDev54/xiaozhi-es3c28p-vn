@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Lumilipat sa Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "Lumilipat sa 4G...",
         "STANDBY": "Standby",
+        "WAKE_WORD_HINT": "Sabihin ang \"%s\" para gisingin ako.",
         "CONNECT_TO": "Kumonekta sa ",
         "CONNECTING": "Kumokonekta...",
         "CONNECTION_SUCCESSFUL": "Matagumpay na koneksyon",
@@ -51,7 +52,9 @@
         "FOUND_NEW_ASSETS": "Nakahanap ng mga bagong assets: %s",
         "DOWNLOAD_ASSETS_FAILED": "Nabigo ang pag-download ng mga assets",
         "LOADING_ASSETS": "Nilo-load ang mga assets...",
-        "HELLO_MY_FRIEND": "Kumusta, kaibigan ko!"
+        "HELLO_MY_FRIEND": "Kumusta, kaibigan ko!",
+        "FLIGHT_MODE_OFF": "Naka-off ang flight mode",
+        "FLIGHT_MODE_ON": "Naka-on ang flight mode",
+        "MODEM_INIT_ERROR": "Nabigo ang pag-initialize ng modem"
     }
 }
-

@@ -1,46 +1,46 @@
-# Hướng dẫn Bo mạch tùy chỉnh
+# Custom Board Guide
 
-（Tiếng Việt | [中文](custom-board_zh.md)）
+This guide describes how to add a new board to the XiaoZhi AI voice assistant project. XiaoZhi AI supports 70+ ESP32-series boards; each one lives in its own directory under `main/boards/`.
 
-Hướng dẫn này giới thiệu cách tùy chỉnh chương trình khởi tạo bo mạch phát triển mới cho dự án chatbot giọng nói AI Xiaozhi. Xiaozhi AI hỗ trợ hơn 70 loại bo mạch phát triển dòng ESP32, mã khởi tạo của mỗi bo mạch được đặt trong thư mục tương ứng.
+## Important
 
-## Lưu ý quan trọng
-
-> **Cảnh báo**: Đối với bo mạch tùy chỉnh, khi cấu hình IO khác với bo mạch hiện có, tuyệt đối không được ghi đè trực tiếp cấu hình bo mạch hiện có để biên dịch firmware. Phải tạo loại bo mạch mới, hoặc thông qua cấu hình builds trong file config.json với name và macro sdkconfig khác nhau để phân biệt. Sử dụng `python scripts/release.py [tên thư mục bo mạch]` để biên dịch và đóng gói firmware.
+> **Warning**: for a custom board whose IO configuration differs from an existing board, never overwrite the original board's configuration. Always create a new board type - or use the `builds` array in `config.json` to produce a distinct firmware name with different `sdkconfig` macros. Use `python scripts/build.py [board-directory]` to build the firmware.
 >
-> Nếu ghi đè trực tiếp cấu hình hiện có, khi nâng cấp OTA trong tương lai, firmware tùy chỉnh của bạn có thể bị ghi đè bởi firmware tiêu chuẩn của bo mạch gốc, khiến thiết bị của bạn không hoạt động bình thường. Mỗi bo mạch có định danh duy nhất và kênh nâng cấp firmware tương ứng, việc duy trì tính duy nhất của định danh bo mạch rất quan trọng.
+> Overwriting an existing board's configuration is dangerous because OTA updates may replace your custom firmware with the stock firmware for the original board. Every board must have a unique identity and its own firmware update channel.
 
-## Cấu trúc thư mục
+## Directory Layout
 
-Cấu trúc thư mục của mỗi bo mạch phát triển thường bao gồm các file sau:
+A board directory typically contains:
 
-- `xxx_board.cc` - Mã khởi tạo cấp bo mạch chính, triển khai các chức năng khởi tạo và tính năng liên quan đến bo mạch
-- `config.h` - File cấu hình cấp bo mạch, định nghĩa ánh xạ chân phần cứng và các mục cấu hình khác
-- `config.json` - Cấu hình biên dịch, chỉ định chip đích và các tùy chọn biên dịch đặc biệt
-- `README.md` - Tài liệu hướng dẫn liên quan đến bo mạch phát triển
+- `xxx_board.cc` - board-level initialization and glue code.
+- `config.h` - pin assignments and board-level settings.
+- `config.json` - reported board type and release configuration consumed by CMake and `scripts/build.py`.
+- `README.md` - board-specific notes.
 
-## Các bước tùy chỉnh bo mạch phát triển
+Boards can live directly under `main/boards/` or be grouped by manufacturer under `main/boards/<manufacturer>/<board>/` (see [Manufacturer Sub-directories](#manufacturer-sub-directories) below).
 
-### 1. Tạo thư mục bo mạch phát triển mới
+## Steps
 
-Đầu tiên tạo một thư mục mới trong thư mục `boards/`, cách đặt tên nên sử dụng dạng `[tên-thương-hiệu]-[loại-bo-mạch]`, ví dụ `m5stack-tab5`:
+### 1. Create the Board Directory
+
+Create a new directory under `main/boards/` using the `[vendor]-[model]` naming style (e.g. `m5stack-tab5`):
 
 ```bash
 mkdir main/boards/my-custom-board
 ```
 
-### 2. Tạo các file cấu hình
+### 2. Create the Configuration Files
 
 #### config.h
 
-Trong `config.h` định nghĩa tất cả cấu hình phần cứng, bao gồm:
+Define all hardware settings in `config.h`:
 
-- Tần số lấy mẫu âm thanh và cấu hình chân I2S
-- Địa chỉ chip codec âm thanh và cấu hình chân I2C
-- Cấu hình chân nút bấm và LED
-- Tham số màn hình hiển thị và cấu hình chân
+- Audio sample rates and I2S pin mapping.
+- Audio codec I2C address and pins.
+- Button and LED pins.
+- Display parameters and pins.
 
-Ví dụ tham khảo (từ lichuang-c3-dev):
+Example (from `lichuang-c3-dev`):
 
 ```c
 #ifndef _BOARD_CONFIG_H_
@@ -48,7 +48,7 @@ Ví dụ tham khảo (từ lichuang-c3-dev):
 
 #include <driver/gpio.h>
 
-// Cấu hình âm thanh
+// Audio
 #define AUDIO_INPUT_SAMPLE_RATE  24000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
@@ -63,10 +63,10 @@ Ví dụ tham khảo (từ lichuang-c3-dev):
 #define AUDIO_CODEC_I2C_SCL_PIN  GPIO_NUM_1
 #define AUDIO_CODEC_ES8311_ADDR  ES8311_CODEC_DEFAULT_ADDR
 
-// Cấu hình nút bấm
+// Buttons
 #define BOOT_BUTTON_GPIO        GPIO_NUM_9
 
-// Cấu hình màn hình hiển thị
+// Display
 #define DISPLAY_SPI_SCK_PIN     GPIO_NUM_3
 #define DISPLAY_SPI_MOSI_PIN    GPIO_NUM_5
 #define DISPLAY_DC_PIN          GPIO_NUM_6
@@ -89,18 +89,17 @@ Ví dụ tham khảo (từ lichuang-c3-dev):
 
 #### config.json
 
-Trong `config.json` định nghĩa cấu hình biên dịch, file này được sử dụng cho script `scripts/release.py` để biên dịch tự động:
+`config.json` defines the compatibility-sensitive reported type and drives `scripts/build.py`:
 
 ```json
 {
-    "target": "esp32s3",  // Mẫu chip đích: esp32, esp32s3, esp32c3, esp32c6, esp32p4, v.v.
+    "type": "my-custom-board",
+    "target": "esp32s3",
     "builds": [
         {
-            "name": "my-custom-board",  // Tên bo mạch phát triển, dùng để tạo gói firmware
+            "name": "my-custom-board",
             "sdkconfig_append": [
-                // Cấu hình kích thước Flash đặc biệt
                 "CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
-                // Cấu hình bảng phân vùng đặc biệt
                 "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m.csv\""
             ]
         }
@@ -108,42 +107,56 @@ Trong `config.json` định nghĩa cấu hình biên dịch, file này được 
 }
 ```
 
-**Giải thích các mục cấu hình:**
-- `target`: Mẫu chip đích, phải khớp với phần cứng
-- `name`: Tên gói firmware đầu ra biên dịch, khuyến nghị phù hợp với tên thư mục
-- `sdkconfig_append`: Mảng các mục cấu hình sdkconfig bổ sung, sẽ được thêm vào cấu hình mặc định
+**Fields**:
+- `type`: compatibility-sensitive board family reported by the firmware. Keep it stable after release.
+- `target`: target chip, must match the real hardware (`esp32`, `esp32s3`, `esp32c3`, `esp32c6`, `esp32p4`, ...).
+- `name`: compatibility-sensitive firmware variant name reported by release builds; typically matches `type`.
+- `sdkconfig_append`: extra sdkconfig lines merged into the defaults.
 
-**Cấu hình sdkconfig_append thường dùng:**
+Both `type` and `name` must contain only lowercase letters, digits, periods
+(`.`), and hyphens (`-`). Underscores, spaces, and uppercase letters are not
+allowed.
+
+**Common `sdkconfig_append` entries**:
+
 ```json
-// Kích thước Flash
-"CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y"   // Flash 4MB
-"CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y"   // Flash 8MB
-"CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y"  // Flash 16MB
+// Flash size
+"CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y"
+"CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y"
 
-// Bảng phân vùng
-"CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/4m.csv\""  // Bảng phân vùng 4MB
-"CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m.csv\""  // Bảng phân vùng 8MB
-"CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"" // Bảng phân vùng 16MB
+// Partition table
+"CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/4m.csv\""
+"CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m.csv\""
 
-// Cấu hình ngôn ngữ
-"CONFIG_LANGUAGE_EN_US=y"  // Tiếng Anh
-"CONFIG_LANGUAGE_ZH_CN=y"  // Tiếng Trung giản thể
-
-// Cấu hình từ đánh thức
-"CONFIG_USE_DEVICE_AEC=y"          // Bật AEC phía thiết bị
-"CONFIG_WAKE_WORD_DISABLED=y"      // Tắt từ đánh thức
+// Audio pipeline
+"CONFIG_USE_DEVICE_AEC=y"          // enable on-device AEC
 ```
 
-### 3. Viết mã khởi tạo cấp bo mạch
+The project defaults to 16MB flash and `partitions/v2/16m.csv` on applicable
+targets. Do not repeat values that already match the effective project and
+target defaults; use `sdkconfig_append` only for actual board-specific
+overrides.
 
-Tạo file `my_custom_board.cc`, triển khai tất cả logic khởi tạo của bo mạch phát triển.
+Do not select a language or a specific wake word in a board `config.json`.
+Those are user build options and must be configured consistently through
+`menuconfig` or build-script parameters so CLI, agent, and online builds can
+share the same interface. `scripts/build.py` also selects the wake-word engine,
+so do not add `CONFIG_USE_*_WAKE_WORD` entries or model selections to board or
+chip presets. A board that must disable wake-word detection for memory, flash,
+or performance reasons may set `CONFIG_WAKE_WORD_DISABLED=y` in
+`sdkconfig_append`. The build script preserves this opt-out and reports the
+variant's `wake_word_supported` as `false`.
 
-Định nghĩa lớp bo mạch phát triển cơ bản bao gồm các phần sau:
+### 3. Implement the Board Class
 
-1. **Định nghĩa lớp**: Kế thừa từ `WifiBoard` hoặc `Ml307Board`
-2. **Hàm khởi tạo**: Bao gồm khởi tạo các thành phần I2C, màn hình hiển thị, nút bấm, IoT, v.v.
-3. **Ghi đè hàm ảo**: Như `GetAudioCodec()`, `GetDisplay()`, `GetBacklight()`, v.v.
-4. **Đăng ký bo mạch**: Sử dụng macro `DECLARE_BOARD` để đăng ký bo mạch
+Create `my_custom_board.cc` containing the board-level implementation.
+
+A basic board class has:
+
+1. **Class declaration**: derive from `WifiBoard` or `Ml307Board`.
+2. **Initialization helpers**: I2C, display, buttons, IoT/MCP tools, etc.
+3. **Virtual overrides**: `GetAudioCodec()`, `GetDisplay()`, `GetBacklight()`, ...
+4. **Board registration**: `DECLARE_BOARD(ClassName)`.
 
 ```cpp
 #include "wifi_board.h"
@@ -166,7 +179,6 @@ private:
     Button boot_button_;
     LcdDisplay* display_;
 
-    // Khởi tạo I2C
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
@@ -183,7 +195,6 @@ private:
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &codec_i2c_bus_));
     }
 
-    // Khởi tạo SPI (dùng cho màn hình hiển thị)
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = DISPLAY_SPI_MOSI_PIN;
@@ -195,22 +206,21 @@ private:
         ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
-    // Khởi tạo nút bấm
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });
     }
 
-    // Khởi tạo màn hình hiển thị (ví dụ ST7789)
     void InitializeDisplay() {
         esp_lcd_panel_io_handle_t panel_io = nullptr;
         esp_lcd_panel_handle_t panel = nullptr;
-        
+
         esp_lcd_panel_io_spi_config_t io_config = {};
         io_config.cs_gpio_num = DISPLAY_SPI_CS_PIN;
         io_config.dc_gpio_num = DISPLAY_DC_PIN;
@@ -226,27 +236,24 @@ private:
         panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
         panel_config.bits_per_pixel = 16;
         ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(panel_io, &panel_config, &panel));
-        
+
         esp_lcd_panel_reset(panel);
         esp_lcd_panel_init(panel);
         esp_lcd_panel_invert_color(panel, true);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
-        
-        // Tạo đối tượng màn hình hiển thị
+
         display_ = new SpiLcdDisplay(panel_io, panel,
-                                    DISPLAY_WIDTH, DISPLAY_HEIGHT, 
-                                    DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
+                                    DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                    DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
                                     DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
-    // Khởi tạo MCP Tools
     void InitializeTools() {
-        // Tham khảo tài liệu MCP
+        // Register MCP tools here; see docs/mcp-usage.md.
     }
 
 public:
-    // Hàm khởi tạo
     MyCustomBoard() : boot_button_(BOOT_BUTTON_GPIO) {
         InitializeI2c();
         InitializeSpi();
@@ -256,198 +263,293 @@ public:
         GetBacklight()->SetBrightness(100);
     }
 
-    // Lấy codec âm thanh
     virtual AudioCodec* GetAudioCodec() override {
         static Es8311AudioCodec audio_codec(
-            codec_i2c_bus_, 
-            I2C_NUM_0, 
-            AUDIO_INPUT_SAMPLE_RATE, 
+            codec_i2c_bus_,
+            I2C_NUM_0,
+            AUDIO_INPUT_SAMPLE_RATE,
             AUDIO_OUTPUT_SAMPLE_RATE,
-            AUDIO_I2S_GPIO_MCLK, 
-            AUDIO_I2S_GPIO_BCLK, 
-            AUDIO_I2S_GPIO_WS, 
-            AUDIO_I2S_GPIO_DOUT, 
+            AUDIO_I2S_GPIO_MCLK,
+            AUDIO_I2S_GPIO_BCLK,
+            AUDIO_I2S_GPIO_WS,
+            AUDIO_I2S_GPIO_DOUT,
             AUDIO_I2S_GPIO_DIN,
-            AUDIO_CODEC_PA_PIN, 
+            AUDIO_CODEC_PA_PIN,
             AUDIO_CODEC_ES8311_ADDR);
         return &audio_codec;
     }
 
-    // Lấy màn hình hiển thị
     virtual Display* GetDisplay() override {
         return display_;
     }
-    
-    // Lấy điều khiển đèn nền
+
     virtual Backlight* GetBacklight() override {
         static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
         return &backlight;
     }
 };
 
-// Đăng ký bo mạch phát triển
 DECLARE_BOARD(MyCustomBoard);
 ```
 
-### 4. Thêm cấu hình hệ thống xây dựng
+### 4. Hook Up the Build System
 
-#### Thêm tùy chọn bo mạch phát triển trong Kconfig.projbuild
+#### Add a Kconfig entry
 
-Mở file `main/Kconfig.projbuild`, thêm mục cấu hình bo mạch phát triển mới trong phần `choice BOARD_TYPE`:
+In `main/Kconfig.projbuild`, add an entry to the `choice BOARD_TYPE` block:
 
 ```kconfig
 choice BOARD_TYPE
     prompt "Board Type"
     default BOARD_TYPE_BREAD_COMPACT_WIFI
     help
-        Board type. Loại bo mạch phát triển
-    
-    # ... Các tùy chọn bo mạch phát triển khác ...
-    
+        Board type.
+
+    # ... other entries ...
+
     config BOARD_TYPE_MY_CUSTOM_BOARD
-        bool "My Custom Board (Bo mạch tùy chỉnh của tôi)"
-        depends on IDF_TARGET_ESP32S3  # Sửa theo chip đích của bạn
+        bool "My Custom Board"
+        depends on IDF_TARGET_ESP32S3  # pick the matching target
 endchoice
 ```
 
-**Lưu ý:**
-- `BOARD_TYPE_MY_CUSTOM_BOARD` là tên mục cấu hình, cần viết hoa toàn bộ, sử dụng dấu gạch dưới phân tách
-- `depends on` chỉ định loại chip đích (như `IDF_TARGET_ESP32S3`, `IDF_TARGET_ESP32C3`, v.v.)
-- Văn bản mô tả có thể sử dụng tiếng Việt và tiếng Anh
+Notes:
+- The identifier must be uppercase and underscore-separated.
+- `depends on` restricts the entry to the correct target (`IDF_TARGET_ESP32S3`, `IDF_TARGET_ESP32C3`, ...).
+- The label can be localized.
 
-#### Thêm cấu hình bo mạch phát triển trong CMakeLists.txt
+#### Add a branch in CMakeLists.txt
 
-Mở file `main/CMakeLists.txt`, thêm cấu hình mới trong phần phán đoán loại bo mạch phát triển:
+Open `main/CMakeLists.txt` and extend the board-type chain:
 
 ```cmake
-# Thêm cấu hình bo mạch phát triển của bạn trong chuỗi elseif
 elseif(CONFIG_BOARD_TYPE_MY_CUSTOM_BOARD)
-    set(BOARD_TYPE "my-custom-board")  # Phù hợp với tên thư mục
-    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)  # Chọn font phù hợp theo kích thước màn hình
+    set(BOARD_DIR "my-custom-board")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)     # pick a font for the display
     set(BUILTIN_ICON_FONT font_awesome_20_4)
-    set(DEFAULT_EMOJI_COLLECTION twemoji_64)  # Tùy chọn, nếu cần hiển thị biểu cảm
-endif()
+    set(DEFAULT_EMOJI_COLLECTION twemoji_64)         // optional, for emoji display
 ```
 
-**Giải thích cấu hình font và biểu cảm:**
+**Font and emoji guidance**:
 
-Chọn kích thước font phù hợp theo độ phân giải màn hình:
-- Màn hình nhỏ (128x64 OLED): `font_puhui_basic_14_1` / `font_awesome_14_1`
-- Màn hình trung bình nhỏ (240x240): `font_puhui_basic_16_4` / `font_awesome_16_4`
-- Màn hình trung bình (240x320): `font_puhui_basic_20_4` / `font_awesome_20_4`
-- Màn hình lớn (480x320+): `font_puhui_basic_30_4` / `font_awesome_30_4`
+Pick a font size that matches the display resolution:
+- Small (128x64 OLED): `font_puhui_basic_14_1` / `font_awesome_14_1`
+- Small-medium (240x240): `font_puhui_basic_16_4` / `font_awesome_16_4`
+- Medium (240x320): `font_puhui_basic_20_4` / `font_awesome_20_4`
+- Large (480x320+): `font_puhui_basic_30_4` / `font_awesome_30_4`
 
-Tùy chọn bộ sưu tập biểu cảm:
-- `twemoji_32` - Biểu cảm 32x32 pixel (màn hình nhỏ)
-- `twemoji_64` - Biểu cảm 64x64 pixel (màn hình lớn)
+Emoji collections:
+- `twemoji_32` - 32x32 pixels (small screens).
+- `twemoji_64` - 64x64 pixels (large screens).
 
-### 5. Cấu hình và biên dịch
+### 5. Build and Flash
 
-#### Phương pháp 1: Sử dụng idf.py cấu hình thủ công
+#### Option A - use `idf.py` manually
 
-1. **Đặt chip đích** (khi cấu hình lần đầu hoặc thay đổi chip):
+1. Set the target chip (first time, or when switching targets):
    ```bash
-   # Đối với ESP32-S3
-   idf.py set-target esp32s3
-   
-   # Đối với ESP32-C3
-   idf.py set-target esp32c3
-   
-   # Đối với ESP32
-   idf.py set-target esp32
+   idf.py set-target esp32s3     # ESP32-S3
+   idf.py set-target esp32c3     # ESP32-C3
+   idf.py set-target esp32       # ESP32
    ```
 
-2. **Dọn dẹp cấu hình cũ**:
+2. Clean stale configuration:
    ```bash
    idf.py fullclean
    ```
 
-3. **Vào menu cấu hình**:
+3. Select the board via menuconfig:
    ```bash
    idf.py menuconfig
    ```
-   
-   Trong menu điều hướng đến: `Xiaozhi Assistant` -> `Board Type`, chọn bo mạch phát triển tùy chỉnh của bạn.
+   Navigate to `Xiaozhi Assistant -> Board Type` and choose your board.
 
-4. **Biên dịch và nạp**:
+4. Build and flash:
    ```bash
    idf.py build
    idf.py flash monitor
    ```
 
-#### Phương pháp 2: Sử dụng script release.py (khuyên dùng)
+#### Option B - use `build.py` (recommended)
 
-Nếu thư mục bo mạch phát triển của bạn có file `config.json`, có thể sử dụng script này để tự động hoàn thành cấu hình và biên dịch:
+If the board directory contains a `config.json`, you can configure and build it automatically:
 
 ```bash
-python scripts/release.py my-custom-board
+python scripts/build.py my-custom-board
 ```
 
-Script này sẽ tự động:
-- Đọc cấu hình `target` trong `config.json` và đặt chip đích
-- Áp dụng các tùy chọn biên dịch trong `sdkconfig_append`
-- Hoàn thành biên dịch và đóng gói firmware
+Language and wake-word selection are user build options:
 
-### 6. Tạo README.md
+```bash
+python scripts/build.py my-custom-board \
+  --language en-US \
+  --wake-word wn9_jarvis_tts
+```
 
-Trong README.md giải thích các tính năng của bo mạch phát triển, yêu cầu phần cứng, các bước biên dịch và nạp:
+The project's Kconfig default language is English (`en-US`). `scripts/build.py`
+also selects English when `--language` is omitted, including when the previous
+build used another language. Pass `--language zh-CN` for Chinese, or another
+locale listed under `main/assets/locales/`. This selects interface text and
+voice prompts. When `--wake-word` is omitted on a supported board, the script
+selects "你好小智" for `zh-CN` and `zh-TW`, and "Hi ESP" for every other language.
+Unsupported boards and variants with an explicit board opt-out remain disabled.
 
-## Các thành phần bo mạch phát triển thường gặp
+`--wake-word` overrides the language-based default. It accepts an ESP-SR model
+name, `nihaoxiaozhi`, `hiesp`, or `disabled`. The two aliases select a compatible
+model for the target. ESP32-C3/C5/C6 targets use WakeNet9s (`wn9s_*`) models;
+ESP32-S3/P4/S31 use the AFE engine and require PSRAM. ESP32 also requires PSRAM
+and uses the engine without AFE. Requests to enable wake-word detection on an
+unsupported or explicitly disabled board are rejected before SDK configuration.
 
-### 1. Màn hình hiển thị
+Custom and Emote assets retain their UI resources, but their packed speech
+models are replaced with the models selected in the current `sdkconfig` (or
+removed when wake-word detection is disabled). The resulting package must fit
+the assets partition. When building directly with `idf.py`, select the
+wake-word implementation and models explicitly in `menuconfig`; chip defaults
+do not select a model, and a fresh manual configuration leaves wake-word
+detection disabled.
 
-Dự án hỗ trợ nhiều driver màn hình hiển thị, bao gồm:
+Query the accepted values in text or machine-readable form:
+
+```bash
+python scripts/build.py --list-languages
+python scripts/build.py --list-languages --json
+python scripts/build.py --list-wake-words
+python scripts/build.py --list-wake-words --json
+```
+
+The wake-word list is read from the currently resolved ESP-SR component, so
+run `idf.py reconfigure` first if `managed_components/` has not been populated.
+
+The script:
+- Prints help when run without arguments. Use `--list-boards` to list board
+  types and variants.
+- Prompts for a variant when the selected board has multiple builds. In
+  non-interactive environments, pass `--name <variant>`.
+- Reads `target` from `config.json`, cleans an existing build directory only
+  when its target differs, then configures the target, board name, defaults,
+  and selected build's `sdkconfig_append` in one `idf.py reconfigure` call.
+  The following `idf.py build` reuses that configuration.
+- Passes the selected build's `name` as the reported firmware variant name.
+- Builds `build/merged-binary.bin` without creating a ZIP by default. Pass
+  `--zip` to recreate `releases/v<version>_<name>.zip`.
+
+#### Windows: command line too long
+
+If a Windows build fails with a Ninja `CreateProcess` error because the compiler
+command exceeds the 32,767-character limit, enable CMake/Ninja response files.
+In the same project directory and ESP-IDF terminal where the build failed, run:
+
+```powershell
+idf.py -D CMAKE_NINJA_FORCE_RESPONSE_FILE=ON reconfigure
+idf.py build
+```
+
+This passes compiler arguments via an `@file` instead of expanding them on the
+command line. Repeat the reconfigure command after `idf.py fullclean` or clearing
+the CMake cache. Moving the project to a shorter path (for example `E:\xz`) may
+also help; enabling Windows long-path support does not raise the command-line
+length limit. See the [workaround in #2340](https://github.com/78/xiaozhi-esp32/issues/2340#issuecomment-6317383781).
+
+### 6. Write the README
+
+In `README.md`, describe the board, hardware requirements, build instructions, and any special notes.
+
+## Manufacturer Sub-directories
+
+Boards can be grouped by manufacturer under `main/boards/<manufacturer>/<board>/`. This is the recommended layout when a single vendor ships several variants - for example `main/boards/waveshare/esp32-p4-nano/` or `main/boards/lceda-course-examples/eda-tv-pro/`.
+
+For a board in a manufacturer sub-directory, add the same value to `config.json`, for example `"manufacturer": "waveshare"`. The firmware reports it as `board.manufacturer` together with `board.type` and `board.name`. Flat community boards without this field report an empty manufacturer string.
+
+Set `BOARD_DIR` to the complete path relative to `main/boards/`:
+
+```cmake
+elseif(CONFIG_BOARD_TYPE_WAVESHARE_ESP32_P4_NANO)
+    set(BOARD_DIR "waveshare/esp32-p4-nano")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_30_4)
+    set(BUILTIN_ICON_FONT font_awesome_30_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+```
+
+The build system loads sources from `main/boards/${BOARD_DIR}/` and reads the reported board type from that directory's `config.json`. If `config.json` or its top-level `type` is absent, the full `BOARD_DIR` with `/` replaced by `-` is used as the fallback type.
+
+Rules of thumb:
+- Use the manufacturer layout when you have two or more boards from the same vendor that share drivers, assets, or documentation.
+- Use the flat layout for one-off boards and community examples.
+- Directory names use lowercase with dashes (e.g. `waveshare`, `lceda-course-examples`).
+
+## Common Board Components
+
+Several reusable components live in `main/boards/common/`. You can include them directly from your board class:
+
+### Display drivers
+
+Supported LCD families include:
 - ST7789 (SPI)
 - ILI9341 (SPI)
 - SH8601 (QSPI)
-- v.v.
+- and many more.
 
-### 2. Codec âm thanh
+### Audio codecs
 
-Các codec được hỗ trợ bao gồm:
-- ES8311 (thường dùng)
-- ES7210 (mảng microphone)
-- AW88298 (bộ khuếch đại)
-- v.v.
+- `Es8311AudioCodec` (most common)
+- `Es8374AudioCodec`
+- `Es8388AudioCodec`
+- `Es8389AudioCodec`
+- `BoxAudioCodec` (ES7210 mic array + codec combo used on ESP-Box boards)
+- `NoAudioCodec` (direct I2S without external codec)
+- `DummyAudioCodec` (placeholder for boards without audio)
 
-### 3. Quản lý nguồn
+### Power management
 
-Một số bo mạch phát triển sử dụng chip quản lý nguồn:
-- AXP2101
-- Các PMIC khả dụng khác
+- `Axp2101` power management IC helpers.
+- `Sy6970` battery charger helpers.
+- `AdcBatteryMonitor` - simple ADC-based battery voltage monitor.
+- `PowerSaveTimer` / `SleepTimer` - helpers for light-sleep scheduling.
 
-### 4. Điều khiển thiết bị MCP
+### Networking
 
-Có thể thêm các công cụ MCP khác nhau để AI có thể sử dụng:
-- Speaker (điều khiển loa)
-- Screen (điều chỉnh độ sáng màn hình)
-- Battery (đọc mức pin)
-- Light (điều khiển đèn LED)
-- v.v.
+- `WifiBoard` - WiFi-only base class.
+- `Ml307Board` / `Nt26Board` - 4G modem base classes.
+- `DualNetworkBoard` - switchable WiFi / 4G base class.
+- `RndisBoard` - RNDIS-over-USB networking (ESP32-S3 / ESP32-P4).
+- `EspVideo` helpers for ESP-Video on ESP32-S3 / ESP32-P4.
 
-## Mối quan hệ kế thừa lớp bo mạch phát triển
+### Input helpers
 
-- `Board` - Lớp cơ sở cấp bo mạch
-  - `WifiBoard` - Bo mạch phát triển kết nối Wi-Fi
-  - `Ml307Board` - Bo mạch phát triển sử dụng module 4G
-  - `DualNetworkBoard` - Bo mạch phát triển hỗ trợ chuyển đổi giữa mạng Wi-Fi và 4G
+- `Button` - standard push buttons (click, long-press, multi-click).
+- `Knob` - rotary encoder wrapper.
+- `PressToTalkMcpTool` - push-to-talk tool that registers itself through MCP.
+- `SystemReset` - helper that performs a safe factory reset when a button is held at boot.
 
-## Kỹ thuật phát triển
+### MCP integration
 
-1. **Tham khảo bo mạch tương tự**: Nếu bo mạch mới của bạn có điểm tương đồng với bo mạch hiện có, có thể tham khảo triển khai hiện tại
-2. **Debug từng bước**: Triển khai chức năng cơ bản trước (như hiển thị), sau đó thêm các chức năng phức tạp hơn (như âm thanh)
-3. **Ánh xạ chân**: Đảm bảo cấu hình chính xác tất cả ánh xạ chân trong config.h
-4. **Kiểm tra tương thích phần cứng**: Xác nhận tương thích của tất cả chip và driver
+Any board can register custom tools - speaker control, screen brightness, battery readout, light control, etc. See [MCP IoT control usage](./mcp-usage.md).
 
-## Vấn đề có thể gặp phải
+## Board Class Hierarchy
 
-1. **Màn hình hiển thị không bình thường**: Kiểm tra cấu hình SPI, cài đặt mirror và cài đặt đảo màu
-2. **Không có âm thanh đầu ra**: Kiểm tra cấu hình I2S, chân enable PA và địa chỉ codec
-3. **Không thể kết nối mạng**: Kiểm tra thông tin xác thực Wi-Fi và cấu hình mạng
-4. **Không thể giao tiếp với server**: Kiểm tra cấu hình MQTT hoặc WebSocket
+- `Board` - base class
+  - `WifiBoard` - WiFi-connected board
+  - `Ml307Board` / `Nt26Board` - 4G modem boards
+  - `DualNetworkBoard` - WiFi + 4G switchable board
+  - `RndisBoard` - RNDIS-over-USB board
 
-## Tài liệu tham khảo
+## Tips
 
-- Tài liệu ESP-IDF: https://docs.espressif.com/projects/esp-idf/
-- Tài liệu LVGL: https://docs.lvgl.io/
-- Tài liệu ESP-SR: https://github.com/espressif/esp-sr
+1. **Start from a similar board** - copying and tweaking an existing board is usually faster than starting from scratch.
+2. **Bring up incrementally** - get the display up first, then audio, then the full stack.
+3. **Double check pin assignments** - every pin defined in `config.h` must match your schematic.
+4. **Check hardware compatibility** - especially codec / PMIC / touch controller combinations.
+
+## Troubleshooting
+
+1. **Display looks wrong** - verify SPI configuration, mirroring, and color inversion.
+2. **No audio** - check I2S wiring, PA enable pin, and codec I2C address.
+3. **Cannot connect to WiFi** - re-check WiFi credentials and provisioning method.
+4. **Cannot reach the server** - verify the WebSocket / MQTT endpoint configuration.
+
+## References
+
+- ESP-IDF documentation: https://docs.espressif.com/projects/esp-idf/
+- LVGL documentation: https://docs.lvgl.io/
+- ESP-SR documentation: https://github.com/espressif/esp-sr

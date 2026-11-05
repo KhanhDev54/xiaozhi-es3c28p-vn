@@ -42,10 +42,10 @@
 
 #if CONFIG_OLED_SSD1306_128X32
 #define DISPLAY_HEIGHT  32
-#elif CONFIG_OLED_SSD1306_128X64
+#elif CONFIG_OLED_SSD1306_128X64 || CONFIG_OLED_SH1106_128X64
 #define DISPLAY_HEIGHT  64
 #else
-#error "未选择 OLED 屏幕类型"
+#error "OLED display type is not selected"
 #endif
 
 #define DISPLAY_MIRROR_X true

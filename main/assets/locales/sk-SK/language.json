@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Prepínanie na Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "Prepínanie na 4G...",
         "STANDBY": "Pohotovostný režim",
+        "WAKE_WORD_HINT": "Zobuďte ma vyslovením „%s“.",
         "CONNECT_TO": "Pripojenie k ",
         "CONNECTING": "Pripája sa...",
         "CONNECTION_SUCCESSFUL": "Pripojenie úspešné",
@@ -51,7 +52,9 @@
         "FOUND_NEW_ASSETS": "Nájdené nové zdroje: %s",
         "DOWNLOAD_ASSETS_FAILED": "Sťahovanie zdrojov zlyhalo",
         "LOADING_ASSETS": "Načítavanie zdrojov...",
-        "HELLO_MY_FRIEND": "Ahoj, môj priateľ!"
+        "HELLO_MY_FRIEND": "Ahoj, môj priateľ!",
+        "FLIGHT_MODE_OFF": "Letecký režim je vypnutý",
+        "FLIGHT_MODE_ON": "Letecký režim je zapnutý",
+        "MODEM_INIT_ERROR": "Chyba inicializácie modemu"
     }
 }
-

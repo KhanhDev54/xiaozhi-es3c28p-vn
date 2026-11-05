@@ -1,262 +1,254 @@
-import sys
-import os
-import json
-import zipfile
+#!/usr/bin/env python3
+"""Prepare, verify, and publish the complete firmware release matrix."""
+
 import argparse
+import hashlib
+import json
+import re
+import struct
+import subprocess
+import zipfile
 from pathlib import Path
-from typing import Optional
 
-# Switch to project root directory
-os.chdir(Path(__file__).resolve().parent.parent)
+import build
 
-################################################################################
-# Common utility functions
-################################################################################
 
-def get_board_type_from_compile_commands() -> Optional[str]:
-    """Parse the current compiled BOARD_TYPE from build/compile_commands.json"""
-    compile_file = Path("build/compile_commands.json")
-    if not compile_file.exists():
+CHIP_IDS = {
+    "esp32": 0x00, "esp32c3": 0x05, "esp32s3": 0x09,
+    "esp32c6": 0x0D, "esp32p4": 0x12, "esp32c5": 0x17,
+    "esp32s31": 0x20,
+}
+
+
+def gh_json(repository, endpoint, optional=False):
+    result = subprocess.run(
+        ["gh", "api", f"repos/{repository}/{endpoint}"],
+        capture_output=True, text=True,
+    )
+    if optional and result.returncode and "HTTP 404" in result.stderr:
         return None
-    with compile_file.open() as f:
-        data = json.load(f)
-    for item in data:
-        if not item["file"].endswith("main.cc"):
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    return json.loads(result.stdout)
+
+
+def find_release(repository, tag):
+    # GitHub's by-tag endpoint does not return unpublished drafts. The list
+    # endpoint includes drafts visible to this token, even before a tag exists.
+    page = 1
+    while True:
+        releases = gh_json(repository, f"releases?per_page=20&page={page}")
+        for item in releases:
+            if item["tag_name"] == tag:
+                return item
+        if len(releases) < 20:
+            return None
+        page += 1
+
+
+def preflight(repository, manifest):
+    """Refuse to replace a published release or move an existing tag."""
+    tag, sha = manifest["tag"], manifest["source_sha"]
+    release = find_release(repository, tag)
+    if release is not None:
+        if not release["draft"]:
+            raise ValueError(f"{tag} is already published")
+        if release["target_commitish"] != sha:
+            raise ValueError(f"Existing draft {tag} targets a different commit")
+    ref = gh_json(repository, f"git/ref/tags/{tag}", optional=True)
+    if ref:
+        obj = ref["object"]
+        while obj["type"] == "tag":
+            obj = gh_json(repository, f"git/tags/{obj['sha']}")["object"]
+        if obj["type"] != "commit" or obj["sha"] != sha:
+            raise ValueError(f"Existing tag {tag} targets a different commit")
+    return release
+
+
+def create_manifest(version, source_sha, idf_version):
+    if not version or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError("PROJECT_VER must be a numeric x.y.z release version")
+    if not re.fullmatch(r"[a-f0-9]{40}", source_sha):
+        raise ValueError("Release source must be a complete commit SHA")
+    if idf_version < (6, 1, 0):
+        raise ValueError("Full releases require ESP-IDF 6.1 or later")
+    variants = build._collect_variants(idf_version=idf_version)
+    if not variants or len(variants) > 256:
+        raise ValueError("Release matrix must contain between 1 and 256 variants")
+    matrix = [{key: v[key] for key in ("board", "name", "full_name", "target")}
+              for v in variants]
+    return {
+        "schema_version": 1,
+        "version": version,
+        "tag": f"v{version}",
+        "source_sha": source_sha,
+        "idf_version": ".".join(map(str, idf_version)),
+        "board_count": len({v["board"] for v in matrix}),
+        "firmware_count": len(matrix),
+        "variants": matrix,
+    }
+
+
+def firmware_metadata(data):
+    """Read the application descriptor from the merged image's app partition."""
+    if len(data) < 0x9000:
+        raise ValueError("Merged firmware is truncated")
+    for pos in range(0x8000, 0x9000, 32):
+        if data[pos:pos + 2] != b"\xaa\x50" or data[pos + 2] != 0:
             continue
-        cmd = item["command"]
-        if "-DBOARD_TYPE=\\\"" in cmd:
-            return cmd.split("-DBOARD_TYPE=\\\"")[1].split("\\\"")[0].strip()
-    return None
+        offset, capacity = struct.unpack_from("<II", data, pos + 4)
+        if offset + 32 + 256 > len(data) or capacity < 288:
+            raise ValueError("Application partition is truncated")
+        if data[offset] != 0xE9:
+            raise ValueError("Invalid application image")
+        descriptor = data[offset + 32:offset + 32 + 256]
+        if struct.unpack_from("<I", descriptor)[0] != 0xABCD5432:
+            raise ValueError("Invalid application descriptor")
+        def string(start, end):
+            return descriptor[start:end].split(b"\0", 1)[0].decode("utf-8")
+        return {
+            "version": string(16, 48),
+            "project": string(48, 80),
+            "idf_version": string(112, 144),
+            "chip_id": struct.unpack_from("<H", data, offset + 12)[0],
+        }
+    raise ValueError("Application partition is missing")
 
 
-def get_project_version() -> Optional[str]:
-    """Read set(PROJECT_VER "x.y.z") from root CMakeLists.txt"""
-    with Path("CMakeLists.txt").open() as f:
-        for line in f:
-            if line.startswith("set(PROJECT_VER"):
-                return line.split("\"")[1]
-    return None
+def verify_assets(manifest, assets_dir):
+    expected = {f"{manifest['tag']}_{v['full_name']}.zip": v
+                for v in manifest["variants"]}
+    actual = {p.name for p in assets_dir.iterdir() if p.is_file()}
+    if actual != set(expected):
+        raise ValueError(
+            f"Firmware set mismatch; missing={sorted(set(expected) - actual)}, "
+            f"unexpected={sorted(actual - set(expected))}"
+        )
+    if len(expected) != manifest["firmware_count"]:
+        raise ValueError("Manifest firmware count does not match its variants")
+    sdk = tuple(map(int, manifest["idf_version"].split(".")))[:2]
+    checksums = []
+    for name, variant in sorted(expected.items()):
+        path = assets_dir / name
+        with zipfile.ZipFile(path) as archive:
+            if archive.namelist() != ["merged-binary.bin"]:
+                raise ValueError(f"{name}: expected only merged-binary.bin")
+            data = archive.read("merged-binary.bin")  # Also verifies ZIP CRC.
+        meta = firmware_metadata(data)
+        if meta["version"] != manifest["version"] or meta["project"] != "xiaozhi":
+            raise ValueError(f"{name}: application version/project mismatch: {meta}")
+        sdk_match = re.match(r"v?(\d+)\.(\d+)", meta["idf_version"])
+        if not sdk_match or tuple(map(int, sdk_match.groups())) != sdk:
+            raise ValueError(f"{name}: ESP-IDF version mismatch: {meta['idf_version']}")
+        if meta["chip_id"] != CHIP_IDS[variant["target"]]:
+            raise ValueError(f"{name}: chip target mismatch")
+        checksums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}\n")
+    return "".join(checksums)
 
 
-def merge_bin() -> None:
-    if os.system("idf.py merge-bin") != 0:
-        print("merge-bin failed", file=sys.stderr)
-        sys.exit(1)
+def publish(repository, manifest, assets_dir, metadata_dir, run_url, make_public):
+    preflight(repository, manifest)
+    checksums = verify_assets(manifest, assets_dir)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = metadata_dir / "release-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    checksum_path = metadata_dir / "SHA256SUMS"
+    checksum_path.write_text(checksums, encoding="utf-8")
+    latest = gh_json(repository, "releases/latest", optional=True)
+    args = ["gh", "api", f"repos/{repository}/releases/generate-notes", "-X", "POST",
+            "-f", f"tag_name={manifest['tag']}", "-f", f"target_commitish={manifest['source_sha']}"]
+    if latest:
+        args += ["-f", f"previous_tag_name={latest['tag_name']}"]
+    generated = json.loads(subprocess.check_output(args, text=True))["body"]
+    notes_path = metadata_dir / "release-notes.md"
+    notes_path.write_text(
+        f"{manifest['firmware_count']} firmware variants for {manifest['board_count']} board directories, "
+        f"built with ESP-IDF {manifest['idf_version']}.\n\n"
+        f"Source: `{manifest['source_sha']}`. [Build and validation]({run_url}).\n\n"
+        "Each firmware ZIP contains `merged-binary.bin`. SHA-256 checksums and the complete "
+        "variant manifest are attached. Builds and package checks do not replace physical "
+        "hardware validation.\n\n" + generated + "\n", encoding="utf-8",
+    )
+    release = preflight(repository, manifest)
+    files = sorted(assets_dir.glob("*.zip")) + [manifest_path, checksum_path]
+    expected = {p.name: p for p in files}
+    if release:
+        extra = {a["name"] for a in release["assets"]} - set(expected)
+        if extra:
+            raise ValueError(f"Existing draft has unrelated assets: {sorted(extra)}")
+    else:
+        subprocess.run([
+            "gh", "release", "create", manifest["tag"], "--repo", repository,
+            "--target", manifest["source_sha"], "--draft", "--title", manifest["tag"],
+            "--notes-file", str(notes_path),
+        ], check=True)
+    subprocess.run([
+        "gh", "release", "edit", manifest["tag"], "--repo", repository,
+        "--notes-file", str(notes_path),
+    ], check=True)
+    # Upload bounded batches so a failed upload can be resumed on the same draft.
+    for start in range(0, len(files), 20):
+        subprocess.run([
+            "gh", "release", "upload", manifest["tag"], "--repo", repository,
+            "--clobber", *map(str, files[start:start + 20]),
+        ], check=True)
+    # Resolve the new draft once, then keep its stable ID for verification.
+    # A draft's synthetic untagged URL can change when its metadata changes.
+    draft = find_release(repository, manifest["tag"])
+    if draft is None or not draft["draft"] or draft["target_commitish"] != manifest["source_sha"]:
+        raise ValueError("Expected draft release is missing or targets another commit")
+    remote = gh_json(repository, f"releases/{draft['id']}")
+    if {a["name"] for a in remote["assets"]} != set(expected):
+        raise ValueError("Uploaded release asset set is incomplete")
+    for asset in remote["assets"]:
+        path = expected[asset["name"]]
+        if asset["size"] != path.stat().st_size:
+            raise ValueError(f"Uploaded asset size mismatch: {path.name}")
+        digest = asset.get("digest")
+        if digest and digest != "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest():
+            raise ValueError(f"Uploaded asset digest mismatch: {path.name}")
+    if make_public:
+        subprocess.run([
+            "gh", "release", "edit", manifest["tag"], "--repo", repository,
+            "--draft=false", "--latest",
+        ], check=True)
+    print(f"{'Published' if make_public else 'Prepared draft'} {manifest['tag']}: {remote['html_url']}")
 
 
-def zip_bin(name: str, version: str) -> None:
-    """Zip build/merged-binary.bin to releases/v{version}_{name}.zip"""
-    out_dir = Path("releases")
-    out_dir.mkdir(exist_ok=True)
-    output_path = out_dir / f"v{version}_{name}.zip"
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    prepare = sub.add_parser("prepare")
+    prepare.add_argument("--idf-version", required=True)
+    prepare.add_argument("--source-sha", required=True)
+    prepare.add_argument("--output-dir", type=Path, required=True)
+    prepare.add_argument("--repository")
+    release = sub.add_parser("publish")
+    release.add_argument("--manifest", type=Path, required=True)
+    release.add_argument("--assets-dir", type=Path, required=True)
+    release.add_argument("--metadata-dir", type=Path, required=True)
+    release.add_argument("--repository", required=True)
+    release.add_argument("--run-url", required=True)
+    release.add_argument("--make-public", action="store_true")
+    args = parser.parse_args()
+    if args.command == "prepare":
+        manifest = create_manifest(build.get_project_version(), args.source_sha,
+                                   tuple(map(int, args.idf_version.split("."))))
+        if args.repository:
+            preflight(args.repository, manifest)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / "release-manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8",
+        )
+        print(f"version={manifest['version']}")
+        print(f"tag={manifest['tag']}")
+        print(f"firmware_count={manifest['firmware_count']}")
+        print("variants=" + json.dumps(manifest["variants"], separators=(",", ":")))
+    else:
+        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        publish(args.repository, manifest, args.assets_dir, args.metadata_dir,
+                args.run_url, args.make_public)
 
-    if output_path.exists():
-        output_path.unlink()
-
-    with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-        zipf.write("build/merged-binary.bin", arcname="merged-binary.bin")
-    print(f"zip bin to {output_path} done")
-
-################################################################################
-# board / variant related functions
-################################################################################
-
-_BOARDS_DIR = Path("main/boards")
-
-
-def _collect_variants(config_filename: str = "config.json") -> list[dict[str, str]]:
-    """Traverse all boards under main/boards, collect variant information.
-
-    Return example:
-        [{"board": "bread-compact-ml307", "name": "bread-compact-ml307"}, ...]
-    """
-    variants: list[dict[str, str]] = []
-    for board_path in _BOARDS_DIR.iterdir():
-        if not board_path.is_dir():
-            continue
-        if board_path.name == "common":
-            continue
-        cfg_path = board_path / config_filename
-        if not cfg_path.exists():
-            print(f"[WARN] {cfg_path} does not exist, skip", file=sys.stderr)
-            continue
-        try:
-            with cfg_path.open() as f:
-                cfg = json.load(f)
-            for build in cfg.get("builds", []):
-                variants.append({"board": board_path.name, "name": build["name"]})
-        except Exception as e:
-            print(f"[ERROR] 解析 {cfg_path} 失败: {e}", file=sys.stderr)
-    return variants
-
-
-def _parse_board_config_map() -> dict[str, str]:
-    """Build the mapping of CONFIG_BOARD_TYPE_xxx and board_type from main/CMakeLists.txt"""
-    cmake_file = Path("main/CMakeLists.txt")
-    mapping: dict[str, str] = {}
-    lines = cmake_file.read_text(encoding="utf-8").splitlines()
-    for idx, line in enumerate(lines):
-        if "if(CONFIG_BOARD_TYPE_" in line:
-            config_name = line.strip().split("if(")[1].split(")")[0]
-            if idx + 1 < len(lines):
-                next_line = lines[idx + 1].strip()
-                if next_line.startswith("set(BOARD_TYPE"):
-                    board_type = next_line.split('"')[1]
-                    mapping[config_name] = board_type
-    return mapping
-
-
-def _find_board_config(board_type: str) -> Optional[str]:
-    """Find the corresponding CONFIG_BOARD_TYPE_xxx for the given board_type"""
-    for config, b_type in _parse_board_config_map().items():
-        if b_type == board_type:
-            return config
-    return None
-
-################################################################################
-# Check board_type in CMakeLists
-################################################################################
-
-def _board_type_exists(board_type: str) -> bool:
-    cmake_file = Path("main/CMakeLists.txt")
-    pattern = f'set(BOARD_TYPE "{board_type}")'
-    return pattern in cmake_file.read_text(encoding="utf-8")
-
-################################################################################
-# Compile implementation
-################################################################################
-
-def release(board_type: str, config_filename: str = "config.json", *, filter_name: Optional[str] = None) -> None:
-    """Compile and package all/specified variants of the specified board_type
-
-    Args:
-        board_type: directory name under main/boards
-        config_filename: config.json name (default: config.json)
-        filter_name: if specified, only compile the build["name"] that matches
-    """
-    cfg_path = _BOARDS_DIR / board_type / config_filename
-    if not cfg_path.exists():
-        print(f"[WARN] {cfg_path} 不存在，跳过 {board_type}")
-        return
-
-    project_version = get_project_version()
-    print(f"Project Version: {project_version} ({cfg_path})")
-
-    with cfg_path.open() as f:
-        cfg = json.load(f)
-    target = cfg["target"]
-
-    builds = cfg.get("builds", [])
-    if filter_name:
-        builds = [b for b in builds if b["name"] == filter_name]
-        if not builds:
-            print(f"[ERROR] 未在 {board_type} 的 {config_filename} 中找到变体 {filter_name}", file=sys.stderr)
-            sys.exit(1)
-
-    for build in builds:
-        name = build["name"]
-        if not name.startswith(board_type):
-            raise ValueError(f"build.name {name} 必须以 {board_type} 开头")
-
-        output_path = Path("releases") / f"v{project_version}_{name}.zip"
-        if output_path.exists():
-            print(f"跳过 {name} 因为 {output_path} 已存在")
-            continue
-
-        # Process sdkconfig_append
-        board_type_config = _find_board_config(board_type)
-        sdkconfig_append = [f"{board_type_config}=y"]
-        sdkconfig_append.extend(build.get("sdkconfig_append", []))
-
-        print("-" * 80)
-        print(f"name: {name}")
-        print(f"target: {target}")
-        for item in sdkconfig_append:
-            print(f"sdkconfig_append: {item}")
-
-        os.environ.pop("IDF_TARGET", None)
-
-        # Call set-target
-        if os.system(f"idf.py set-target {target}") != 0:
-            print("set-target failed", file=sys.stderr)
-            sys.exit(1)
-
-        # Append sdkconfig
-        with Path("sdkconfig").open("a") as f:
-            f.write("\n")
-            f.write("# Append by release.py\n")
-            for append in sdkconfig_append:
-                f.write(f"{append}\n")
-        # Build with macro BOARD_NAME defined to name
-        if os.system(f"idf.py -DBOARD_NAME={name} -DBOARD_TYPE={board_type} build") != 0:
-            print("build failed")
-            sys.exit(1)
-
-        # merge-bin
-        merge_bin()
-
-        # Zip
-        zip_bin(name, project_version)
-
-################################################################################
-# CLI entry
-################################################################################
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("board", nargs="?", default=None, help="板子类型或 all")
-    parser.add_argument("-c", "--config", default="config.json", help="指定 config 文件名，默认 config.json")
-    parser.add_argument("--list-boards", action="store_true", help="列出所有支持的 board 及变体列表")
-    parser.add_argument("--json", action="store_true", help="配合 --list-boards，JSON 格式输出")
-    parser.add_argument("--name", help="指定变体名称，仅编译匹配的变体")
-
-    args = parser.parse_args()
-
-    # List mode
-    if args.list_boards:
-        variants = _collect_variants(config_filename=args.config)
-        if args.json:
-            print(json.dumps(variants))
-        else:
-            for v in variants:
-                print(f"{v['board']}: {v['name']}")
-        sys.exit(0)
-
-    # Current directory firmware packaging mode
-    if args.board is None:
-        merge_bin()
-        curr_board_type = get_board_type_from_compile_commands()
-        if curr_board_type is None:
-            print("未能从 compile_commands.json 解析 board_type", file=sys.stderr)
-            sys.exit(1)
-        project_ver = get_project_version()
-        zip_bin(curr_board_type, project_ver)
-        sys.exit(0)
-
-    # Compile mode
-    board_type_input: str = args.board
-    name_filter: str | None = args.name
-
-    # Check board_type in CMakeLists
-    if board_type_input != "all" and not _board_type_exists(board_type_input):
-        print(f"[ERROR] main/CMakeLists.txt 中未找到 board_type {board_type_input}", file=sys.stderr)
-        sys.exit(1)
-
-    variants_all = _collect_variants(config_filename=args.config)
-
-    # Filter board_type list
-    target_board_types: set[str]
-    if board_type_input == "all":
-        target_board_types = {v["board"] for v in variants_all}
-    else:
-        target_board_types = {board_type_input}
-
-    for bt in sorted(target_board_types):
-        if not _board_type_exists(bt):
-            print(f"[ERROR] main/CMakeLists.txt 中未找到 board_type {bt}", file=sys.stderr)
-            sys.exit(1)
-        cfg_path = _BOARDS_DIR / bt / args.config
-        if bt == board_type_input and not cfg_path.exists():
-            print(f"开发板 {bt} 未定义 {args.config} 配置文件，跳过")
-            sys.exit(0)
-        release(bt, config_filename=args.config, filter_name=name_filter if bt == board_type_input else None)
+    main()

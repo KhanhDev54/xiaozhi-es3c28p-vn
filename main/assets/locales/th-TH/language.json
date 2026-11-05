@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "กำลังเปลี่ยนเป็น Wi-Fi...",
         "SWITCH_TO_4G_NETWORK": "กำลังเปลี่ยนเป็น 4G...",
         "STANDBY": "พร้อม",
+        "WAKE_WORD_HINT": "พูดว่า \"%s\" เพื่อปลุกฉัน",
         "CONNECT_TO": "เชื่อมต่อกับ ",
         "CONNECTING": "กำลังเชื่อมต่อ...",
         "CONNECTION_SUCCESSFUL": "เชื่อมต่อสำเร็จ",
@@ -51,6 +52,9 @@
         "LOADING_ASSETS": "กำลังโหลดทรัพยากร...",
         "PLEASE_WAIT": "กรุณารอสักครู่...",
         "FOUND_NEW_ASSETS": "พบทรัพยากรใหม่: %s",
-        "HELLO_MY_FRIEND": "สวัสดี เพื่อนของฉัน!"
+        "HELLO_MY_FRIEND": "สวัสดี เพื่อนของฉัน!",
+        "FLIGHT_MODE_OFF": "โหมดเครื่องบินปิดอยู่",
+        "FLIGHT_MODE_ON": "โหมดเครื่องบินเปิดอยู่",
+        "MODEM_INIT_ERROR": "การเริ่มต้นโมเด็มล้มเหลว"
     }
 }
