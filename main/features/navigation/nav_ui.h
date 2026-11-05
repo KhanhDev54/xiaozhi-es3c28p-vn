@@ -31,6 +31,13 @@ public:
     void Update(Display* display, const PhoneNavState& state, bool icon_changed);
     bool IsVisible() const { return visible_; }
 
+    // Chat (listening / speaking) has priority: hide the navigation screen while a
+    // conversation runs and bring it back when the device is idle again.
+    // Must be called with the display locked.
+    void SetChatActive(Display* display, bool active);
+    // Hidden by the user ("tắt màn hình dẫn đường") until shown again or the next trip.
+    void SetUserHidden(Display* display, bool hidden);
+
 private:
     NavUI() = default;
     void Create(Display* display);
@@ -61,6 +68,11 @@ private:
     lv_point_precise_t head_pts_[3] = {};
     lv_point_precise_t aux_pts_[kAux][2] = {};
 
+    void Apply(Display* display);
+
+    PhoneNavState last_state_;
+    bool chat_active_ = false;
+    bool user_hidden_ = false;
     std::string last_directions_;
     int start_distance_ = -1;
     int last_type_ = -1;

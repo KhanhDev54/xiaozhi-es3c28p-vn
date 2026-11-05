@@ -271,10 +271,38 @@ void NavUI::UpdateProgress(const PhoneNavState& state) {
     lv_obj_remove_flag(bar_, LV_OBJ_FLAG_HIDDEN);
 }
 
+void NavUI::SetChatActive(Display* display, bool active) {
+    if (chat_active_ == active) return;
+    chat_active_ = active;
+    Apply(display);
+}
+
+void NavUI::SetUserHidden(Display* display, bool hidden) {
+    user_hidden_ = hidden;
+    Apply(display);
+}
+
+void NavUI::Apply(Display* display) {
+    if (container_ == nullptr) return;
+    bool want = last_state_.connected && last_state_.active && !chat_active_ && !user_hidden_;
+    if (want && !visible_) {
+        lv_obj_remove_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(container_);
+        visible_ = true;
+    } else if (!want && visible_) {
+        lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+        visible_ = false;
+    }
+}
+
 void NavUI::Update(Display* display, const PhoneNavState& state, bool /*icon_changed*/) {
     if (container_ == nullptr) {
         Create(display);
     }
+    // A new trip (navigation just started) shows the screen again even if the
+    // user hid it during the previous one
+    if (state.active && !last_state_.active) user_hidden_ = false;
+    last_state_ = state;
 
     bool show = state.connected && state.active;
     if (!show) {
@@ -319,11 +347,7 @@ void NavUI::Update(Display* display, const PhoneNavState& state, bool /*icon_cha
     add(state.eta);
     lv_label_set_text(footer_, footer.c_str());
 
-    if (!visible_) {
-        lv_obj_remove_flag(container_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(container_);
-        visible_ = true;
-    }
+    Apply(display);
 }
 
 #endif  // CONFIG_PHONE_NAVIGATION_ENABLE

@@ -36,6 +36,7 @@
 #ifdef CONFIG_PHONE_NAVIGATION_ENABLE
 #include "features/navigation/phone_nav_ble.h"
 #include "features/navigation/nav_ui.h"
+#include "device_state_event.h"
 #include "features/bank_alert/bank_alert.h"
 #endif
 #ifdef CONFIG_SD_CARD_MMC_INTERFACE
@@ -517,6 +518,39 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
 #ifdef CONFIG_PHONE_NAVIGATION_ENABLE
   // Turn-by-turn navigation forwarded from the phone (Chronos app, BLE)
   void InitializePhoneNavigation() {
+    // Navigation <-> chat: a conversation (tap, BOOT, "Sophia") takes over the
+    // screen; when it ends and the phone is still navigating, the map screen returns.
+    DeviceStateEventManager::GetInstance().RegisterStateChangeCallback(
+        [this](DeviceState /*previous*/, DeviceState current) {
+          bool chatting = current == kDeviceStateConnecting || current == kDeviceStateListening ||
+                          current == kDeviceStateSpeaking;
+          DisplayLockGuard lock(display_);
+          NavUI::GetInstance().SetChatActive(display_, chatting);
+        });
+
+    auto& mcp = McpServer::GetInstance();
+    mcp.AddTool("self.navigation.show",
+        "Hiện lại màn hình dẫn đường (mũi tên rẽ, khoảng cách) khi điện thoại đang dẫn đường bằng Google Maps qua app Chronos.\n"
+        "Dùng khi người dùng nói 'mở dẫn đường', 'hiện chỉ đường', 'quay lại bản đồ'. Màn hình hiện ra khi kết thúc trò chuyện.",
+        PropertyList(), [this](const PropertyList&) -> ReturnValue {
+          auto st = PhoneNavBle::GetInstance().GetState();
+          {
+            DisplayLockGuard lock(display_);
+            NavUI::GetInstance().SetUserHidden(display_, false);
+          }
+          if (!st.connected) return std::string("{\"success\": false, \"message\": \"Điện thoại chưa kết nối Bluetooth (app Chronos).\"}");
+          if (!st.active) return std::string("{\"success\": false, \"message\": \"Điện thoại chưa bắt đầu dẫn đường trên Google Maps.\"}");
+          return true;
+        });
+    mcp.AddTool("self.navigation.hide",
+        "Tắt màn hình dẫn đường, quay về màn hình trò chuyện (điện thoại vẫn tiếp tục dẫn đường).\n"
+        "Dùng khi người dùng nói 'tắt dẫn đường', 'ẩn chỉ đường', 'về màn hình chính'.",
+        PropertyList(), [this](const PropertyList&) -> ReturnValue {
+          DisplayLockGuard lock(display_);
+          NavUI::GetInstance().SetUserHidden(display_, true);
+          return true;
+        });
+
     // Bank transfer alerts: Chronos also forwards phone notifications
     PhoneNavBle::GetInstance().SetNotificationCallback(
         [](int /*icon*/, const std::string& text) { bank::OnNotification(text); });
