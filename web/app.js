@@ -360,6 +360,68 @@ function monInit() {
   monButtons();
 }
 
+
+// ---------- unbind helper (MAC + Device ID -> support email) ----------
+const UNBIND_TO = "xiaozhi.ai@tenclass.com";
+function normMac(v) {
+  const hex = (v || "").replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+  if (hex.length !== 12) return null;
+  return hex.match(/../g).join(":");
+}
+function unbindMail() {
+  const err = $("unbindErr");
+  err.textContent = "";
+  const mac = normMac($("macInput").value);
+  const id = ($("devIdInput").value || "").trim();
+  if (!mac) { err.textContent = "Địa chỉ MAC chưa đúng (dạng AA:BB:CC:DD:EE:FF)."; return null; }
+  if (id && !/^\d+$/.test(id)) { err.textContent = "Device ID chỉ gồm chữ số (có thể để trống)."; return null; }
+  $("macInput").value = mac;
+  const subject = `【解绑设备】${id ? "设备ID " + id + "，" : ""}MAC地址 ${mac}`;
+  const body =
+    "尊敬的 Xiaozhi 支持团队：\n" +
+    "我无法登录之前绑定该设备的账户，请协助将以下设备从旧账户中解除绑定。\n" +
+    `+ MAC Address: ${mac}\n` +
+    (id ? `+ Device ID: ${id}\n` : "") +
+    "处理完成后，请通过此邮箱回复确认。谢谢！\n\n" +
+    "Hello Xiaozhi support team, I can no longer log in to the account this device is bound to. " +
+    "Please unbind the device above from the old account. Thank you!";
+  return { subject, body };
+}
+async function readMac() {
+  const err = $("unbindErr");
+  err.textContent = "";
+  try {
+    if (!loader) await connect();
+    if (!loader) return;
+    busy = true; refreshButtons();
+    const mac = await loader.chip.readMac(loader);
+    $("macInput").value = (mac || "").toUpperCase();
+    log(`MAC của mạch: ${$("macInput").value}`);
+    try { await loader.after("hard_reset"); } catch (_) {}
+    await safeDisconnect();
+    setStatus("off", "Chưa kết nối");
+  } catch (e) {
+    err.textContent = "Không đọc được MAC: " + (e.message || e);
+  } finally {
+    busy = false; refreshButtons();
+  }
+}
+function unbindInit() {
+  $("btnReadMac").addEventListener("click", readMac);
+  $("btnGmail").addEventListener("click", () => {
+    const m = unbindMail(); if (!m) return;
+    const url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(UNBIND_TO) +
+      "&su=" + encodeURIComponent(m.subject) + "&body=" + encodeURIComponent(m.body);
+    window.open(url, "_blank", "noopener");
+  });
+  $("btnMailto").addEventListener("click", () => {
+    const m = unbindMail(); if (!m) return;
+    location.href = "mailto:" + UNBIND_TO + "?subject=" + encodeURIComponent(m.subject) +
+      "&body=" + encodeURIComponent(m.body);
+  });
+  if (!("serial" in navigator)) $("btnReadMac").disabled = true;
+}
+
 // ---------- wiring ----------
 function init() {
   log("Sẵn sàng.");
@@ -380,6 +442,7 @@ function init() {
   }
 
   monInit();
+  unbindInit();
   els.connect.addEventListener("click", connect);
   els.disconnect.addEventListener("click", disconnect);
   els.flash.addEventListener("click", flash);

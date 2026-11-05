@@ -91,15 +91,79 @@
     <section class="card">
       <h2><span class="step">3</span> Xem log của mạch <span class="hint">(để báo lỗi)</span></h2>
       <p class="muted">Dùng sau khi đã nạp xong và đã bấm <b>Ngắt</b> ở trên. Bấm <b>Mở log</b>, chọn cổng COM của mạch,
-        rồi thao tác trên mạch (chạm, vuốt…). Xong bấm <b>Sao chép</b> và dán gửi cho người hỗ trợ.</p>
+        rồi thao tác trên mạch (chạm, bấm nút, nói chuyện…). Xong bấm <b>Sao chép</b> và dán gửi cho người hỗ trợ.</p>
       <div class="actions">
         <button id="btnMonOpen" class="btn btn-primary">Mở log</button>
-        <button id="btnMonReset" class="btn btn-ghost" disabled>Khởi động lại mạch</button>
+        <button id="btnMonReset" class="btn btn-outline" disabled>Khởi động lại mạch</button>
         <button id="btnMonClose" class="btn btn-ghost" disabled>Dừng</button>
-        <button id="btnMonCopy" class="btn btn-ghost">Sao chép</button>
-        <button id="btnMonSave" class="btn btn-ghost">Tải file .txt</button>
+        <button id="btnMonCopy" class="btn btn-outline">Sao chép</button>
+        <button id="btnMonSave" class="btn btn-outline">Tải file .txt</button>
       </div>
       <pre id="monLog" class="log mon" aria-live="polite"></pre>
+    </section>
+
+    <section class="grid">
+      <div class="card" id="unbind">
+        <h2><span class="step">4</span> Gỡ liên kết thiết bị</h2>
+        <p class="muted">Dùng khi mạch đã gắn vào một tài khoản xiaozhi.me mà bạn <b>không đăng nhập được nữa</b>.
+          Trang sẽ soạn sẵn email gửi bộ phận hỗ trợ Xiaozhi (<code>xiaozhi.ai@tenclass.com</code>) để họ gỡ mạch khỏi tài khoản cũ.</p>
+        <ol class="mini">
+          <li><b>Device ID</b> (không bắt buộc): hỏi trợ lý <i>"Mã thiết bị của tôi là gì?"</i> hoặc xem mã 6 số lúc kích hoạt.</li>
+          <li><b>Địa chỉ MAC</b> (bắt buộc): bấm <b>Lấy MAC</b> rồi chọn cổng COM của mạch.</li>
+          <li>Bấm <b>Gửi qua Gmail</b> (hoặc <b>Mở ứng dụng mail</b>) rồi bấm Gửi.</li>
+        </ol>
+        <div class="row">
+          <div>
+            <label class="field-label" for="macInput">Địa chỉ MAC <span class="req">bắt buộc</span></label>
+            <input id="macInput" class="input mono" placeholder="AA:BB:CC:DD:EE:FF" spellcheck="false">
+          </div>
+          <div>
+            <label class="field-label" for="devIdInput">Device ID <span class="opt">nếu có</span></label>
+            <input id="devIdInput" class="input mono" placeholder="Ví dụ 123456" inputmode="numeric">
+          </div>
+        </div>
+        <p class="err" id="unbindErr"></p>
+        <div class="actions">
+          <button id="btnReadMac" class="btn btn-outline">Lấy MAC</button>
+          <button id="btnGmail" class="btn btn-primary">Gửi qua Gmail</button>
+          <button id="btnMailto" class="btn btn-outline">Mở ứng dụng mail</button>
+        </div>
+        <p class="muted small">Cần đang đăng nhập Gmail trên trình duyệt để mở khung soạn thư. Thời gian xử lý tùy bộ phận hỗ trợ của Xiaozhi.</p>
+      </div>
+
+      <div class="card" id="rescue">
+        <h2><span class="step">5</span> Sửa lỗi thiết bị</h2>
+        <details open>
+          <summary>Nạp sai firmware, mạch treo, không nhận cổng COM</summary>
+          <p class="muted">Mạch có nút <b>BOOT</b> (ESP32-S3 Zero, mạch 2.8"):</p>
+          <ol class="mini">
+            <li>Rút cáp. <b>Giữ nút BOOT</b>, cắm cáp vào máy tính (hoặc bấm RESET), rồi thả BOOT.</li>
+            <li>Bấm <b>Kết nối</b> ở trên, chọn cổng COM vừa xuất hiện.</li>
+            <li>Bật ô <b>Xoá toàn bộ flash trước khi nạp</b> rồi nạp lại firmware đúng loại mạch.</li>
+          </ol>
+        </details>
+        <details>
+          <summary>Cổng COM chập chờn, mạch khởi động lại liên tục (không có nút BOOT)</summary>
+          <p class="muted">Dùng phần mềm chính hãng <b>Flash Download Tool</b> của Espressif trên Windows:</p>
+          <ol class="mini">
+            <li>Tải về tại trang
+              <a href="https://www.espressif.com/en/support/download/other-tools" target="_blank" rel="noopener">công cụ của Espressif</a>
+              rồi giải nén.</li>
+            <li>Mở <code>flash_download_tool_x.x.x.exe</code>, chọn ChipType <b>ESP32-S3</b>, WorkMode <b>Develop</b>, LoadMode <b>UART</b>.</li>
+            <li>Tick dòng đầu, chọn file firmware <code>.bin</code> (tải ở mục 1), địa chỉ <code>0x0</code>; phần SPI để mặc định.</li>
+            <li>Cắm mạch, chọn đúng cổng COM (cổng đang chập chờn), BAUD 921600 (cáp kém thì 115200).</li>
+            <li>Bấm <b>START</b> liên tục đến khi ô trạng thái báo <b>SYNC</b>, chờ tới <b>FINISH</b>.</li>
+          </ol>
+        </details>
+        <details>
+          <summary>Không thấy cổng COM nào</summary>
+          <ul class="mini">
+            <li>Dùng cáp USB <b>có truyền dữ liệu</b> (cáp chỉ sạc sẽ không hiện cổng).</li>
+            <li>Cắm thẳng vào máy tính, tránh hub USB.</li>
+            <li>Mạch dùng chip chuyển USB (CH340/CP210x) thì cài driver của hãng chip đó.</li>
+          </ul>
+        </details>
+      </div>
     </section>
 
     <section class="card help">
