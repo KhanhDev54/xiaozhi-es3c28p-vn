@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <driver/i2s_std.h>
+#include <esp_idf_version.h>
 
 #include <vector>
 #include <string>
@@ -12,7 +13,16 @@
 #include "board.h"
 
 #define AUDIO_CODEC_DMA_DESC_NUM 6
-#define AUDIO_CODEC_DMA_FRAME_NUM 255
+#define AUDIO_CODEC_DMA_FRAME_NUM 240
+
+// ESP-IDF 6 removed i2s_port_t and changed i2s_chan_config_t::id to an integer.
+// Keep numeric I2S controller IDs usable on targets where IDF 5 does not expose
+// every value through the target-specific i2s_port_t enum (for example ESP32-C3).
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define XIAOZHI_I2S_PORT(port) (port)
+#else
+#define XIAOZHI_I2S_PORT(port) static_cast<i2s_port_t>(port)
+#endif
 
 class AudioCodec {
 public:
@@ -23,7 +33,6 @@ public:
     virtual void SetInputGain(float gain);
     virtual void EnableInput(bool enable);
     virtual void EnableOutput(bool enable);
-    virtual bool SetOutputSampleRate(int sample_rate);
 
     virtual void OutputData(std::vector<int16_t>& data);
     virtual bool InputData(std::vector<int16_t>& data);
@@ -33,7 +42,6 @@ public:
     inline bool input_reference() const { return input_reference_; }
     inline int input_sample_rate() const { return input_sample_rate_; }
     inline int output_sample_rate() const { return output_sample_rate_; }
-    inline int original_output_sample_rate() const { return original_output_sample_rate_; }
     inline int input_channels() const { return input_channels_; }
     inline int output_channels() const { return output_channels_; }
     inline int output_volume() const { return output_volume_; }
@@ -51,7 +59,6 @@ protected:
     bool output_enabled_ = false;
     int input_sample_rate_ = 0;
     int output_sample_rate_ = 0;
-    int original_output_sample_rate_ = 0;
     int input_channels_ = 1;
     int output_channels_ = 1;
     int output_volume_ = 70;

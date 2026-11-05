@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Wi-Fi'ye geçiliyor...",
         "SWITCH_TO_4G_NETWORK": "4G'ye geçiliyor...",
         "STANDBY": "Bekleme",
+        "WAKE_WORD_HINT": "Beni uyandırmak için \"%s\" deyin.",
         "CONNECT_TO": "Bağlan ",
         "CONNECTING": "Bağlanıyor...",
         "CONNECTED_TO": "Bağlandı ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "Varlıklar yükleniyor...",
         "PLEASE_WAIT": "Lütfen bekleyin...",
         "FOUND_NEW_ASSETS": "Yeni varlıklar bulundu: %s",
-        "HELLO_MY_FRIEND": "Merhaba, arkadaşım!"
+        "HELLO_MY_FRIEND": "Merhaba, arkadaşım!",
+        "CONNECTION_SUCCESSFUL": "Bağlantı başarılı",
+        "FLIGHT_MODE_OFF": "Uçak modu kapalı",
+        "FLIGHT_MODE_ON": "Uçak modu açık",
+        "MODEM_INIT_ERROR": "Modem başlatma hatası"
     }
 }

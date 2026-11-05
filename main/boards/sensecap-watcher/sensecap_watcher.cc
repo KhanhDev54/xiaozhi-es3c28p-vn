@@ -20,7 +20,6 @@
 #include <driver/spi_master.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
-#include <wifi_station.h>
 #include <iot_button.h>
 #include <iot_knob.h>
 #include <esp_io_expander_tca95xx_16bit.h>
@@ -46,23 +45,42 @@ class CustomLcdDisplay : public SpiLcdDisplay {
                         bool mirror_y,
                         bool swap_xy) 
             : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
-    
+            // Note: UI customization should be done in SetupUI(), not in constructor
+            // to ensure lvgl objects are created before accessing them
+        }
+
+        virtual void SetupUI() override {
+            // Call parent SetupUI() first to create all lvgl objects
+            SpiLcdDisplay::SetupUI();
+
             DisplayLockGuard lock(this);
             auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
             auto text_font = lvgl_theme->text_font()->font();
             auto icon_font = lvgl_theme->icon_font()->font();
 
-            lv_obj_set_size(status_bar_, LV_HOR_RES, text_font->line_height * 2 + 10);
+            lv_obj_set_size(top_bar_, LV_HOR_RES, text_font->line_height);
+            lv_obj_set_style_layout(top_bar_, LV_LAYOUT_NONE, 0);
+            lv_obj_set_style_pad_top(top_bar_, 10, 0);
+            lv_obj_set_style_pad_bottom(top_bar_, 1, 0);
+
+            lv_obj_set_size(status_bar_, LV_HOR_RES, text_font->line_height);
             lv_obj_set_style_layout(status_bar_, LV_LAYOUT_NONE, 0);
             lv_obj_set_style_pad_top(status_bar_, 10, 0);
             lv_obj_set_style_pad_bottom(status_bar_, 1, 0);
+            lv_obj_set_y(status_bar_, text_font->line_height);
+            lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_IGNORE_LAYOUT);
+
+            // Reparent mute and battery labels to top_bar_ to allow absolute positioning
+            lv_obj_set_parent(mute_label_, top_bar_);
+            lv_obj_set_parent(battery_label_, top_bar_);
+            lv_obj_set_style_margin_left(battery_label_, 0, 0);
 
             // 针对圆形屏幕调整位置
-            //      network  battery  mute     //
+            //      network  mute  battery     //
             //               status            //
-            lv_obj_align(battery_label_, LV_ALIGN_TOP_MID, -2.5 * icon_font->line_height, 0);
-            lv_obj_align(network_label_, LV_ALIGN_TOP_MID, -0.5 * icon_font->line_height, 0);
-            lv_obj_align(mute_label_, LV_ALIGN_TOP_MID, 1.5 * icon_font->line_height, 0);
+            lv_obj_align(network_label_, LV_ALIGN_TOP_MID, -1.5 * icon_font->line_height, 0);
+            lv_obj_align(mute_label_, LV_ALIGN_TOP_MID, 1.0 * icon_font->line_height, 0);
+            lv_obj_align(battery_label_, LV_ALIGN_TOP_MID, 2.5 * icon_font->line_height, 0);
             
             lv_obj_align(status_label_, LV_ALIGN_BOTTOM_MID, 0, 0);
             lv_obj_set_flex_grow(status_label_, 0);
@@ -77,6 +95,10 @@ class CustomLcdDisplay : public SpiLcdDisplay {
             lv_obj_set_style_bg_color(low_battery_popup_, lv_color_hex(0xFF0000), 0);
             lv_obj_set_width(low_battery_label_, LV_HOR_RES * 0.75);
             lv_label_set_long_mode(low_battery_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+            // 针对圆形屏幕调整底部对话框位置，避免被圆角遮挡
+            lv_obj_set_style_pad_bottom(bottom_bar_, 30, 0);
+            lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.75); // 限制宽度，避免文字贴边
         }
 };
 
@@ -110,7 +132,16 @@ private:
             bool is_charging = (IoExpanderGetLevel(BSP_PWR_VBUS_IN_DET) == 0);
             if (is_charging) {
                 ESP_LOGI(TAG, "charging");
-                GetBacklight()->SetBrightness(0);
+                // Serialize with battery polling on the main task. USB may have
+                // disconnected by the time the request is handled.
+                Application::GetInstance().Schedule([this]() {
+                    power_save_timer_->SetEnabled(false);
+                    if (IoExpanderGetLevel(BSP_PWR_VBUS_IN_DET) == 0) {
+                        GetBacklight()->SetBrightness(0);
+                    } else {
+                        power_save_timer_->SetEnabled(true);
+                    }
+                });
             } else {
                 IoExpanderSetLevel(BSP_PWR_SYSTEM, 0);
             }
@@ -247,11 +278,13 @@ private:
         
         iot_button_register_cb(btns, BUTTON_SINGLE_CLICK, nullptr, [](void* button_handle, void* usr_data) {
             auto self = static_cast<SensecapWatcher*>(usr_data);
-            auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                self->ResetWifiConfiguration();
-            }
             self->power_save_timer_->WakeUp();
+
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                self->EnterWifiConfigMode();
+                return;
+            }
             app.ToggleChatState();
         }, this);
         
@@ -310,7 +343,7 @@ private:
         ESP_LOGI(TAG, "Install panel IO");
         const esp_lcd_panel_io_spi_config_t io_config = {
             .cs_gpio_num = BSP_LCD_SPI_CS,
-            .dc_gpio_num = -1,
+            .dc_gpio_num = GPIO_NUM_NC,
             .spi_mode = 3,
             .pclk_hz = DRV_LCD_PIXEL_CLK_HZ,
             .trans_queue_depth = 2,
@@ -328,12 +361,11 @@ private:
         esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)BSP_LCD_SPI_NUM, &io_config, &panel_io_);
     
         ESP_LOGD(TAG, "Install LCD driver");
-        const esp_lcd_panel_dev_config_t panel_config = {
-            .reset_gpio_num = BSP_LCD_GPIO_RST, // Shared with Touch reset
-            .rgb_ele_order = DRV_LCD_RGB_ELEMENT_ORDER,
-            .bits_per_pixel = DRV_LCD_BITS_PER_PIXEL,
-            .vendor_config = &vendor_config,
-        };
+        esp_lcd_panel_dev_config_t panel_config = {};
+        panel_config.rgb_ele_order = DRV_LCD_RGB_ELEMENT_ORDER;
+        panel_config.bits_per_pixel = DRV_LCD_BITS_PER_PIXEL;
+        panel_config.reset_gpio_num = BSP_LCD_GPIO_RST; // Shared with Touch reset
+        panel_config.vendor_config = &vendor_config;
         esp_lcd_new_panel_spd2010(panel_io_, &panel_config, &panel_);
 
         esp_lcd_panel_reset(panel_);
@@ -609,23 +641,21 @@ public:
         return &led;
     }
 
-    virtual void SetPowerSaveMode(bool enabled) override {
-        if (!enabled) {
+    virtual void SetPowerSaveLevel(PowerSaveLevel level) override {
+        if (level != PowerSaveLevel::LOW_POWER) {
             power_save_timer_->WakeUp();
         }
-        WifiBoard::SetPowerSaveMode(enabled);
+        WifiBoard::SetPowerSaveLevel(level);
     }
 
-    virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging) override {
-        static bool last_discharging = false;
+    virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         charging = (IoExpanderGetLevel(BSP_PWR_VBUS_IN_DET) == 0);
         discharging = !charging;
         level = (int)BatterygetPercent(false);
 
-        if (discharging != last_discharging) {
-            power_save_timer_->SetEnabled(discharging);
-            last_discharging = discharging;
-        }
+        // Always synchronize, including the first snapshot and a short USB
+        // connection observed only by the shutdown callback. Re-enabling is a no-op.
+        power_save_timer_->SetEnabled(discharging);
         if (level <= 1  &&  discharging) {
             ESP_LOGI(TAG, "Battery level is low, shutting down");
             IoExpanderSetLevel(BSP_PWR_SYSTEM, 0);

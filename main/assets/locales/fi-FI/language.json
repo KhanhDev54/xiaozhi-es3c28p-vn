@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Vaihdetaan Wi-Fi:hin...",
         "SWITCH_TO_4G_NETWORK": "Vaihdetaan 4G:hen...",
         "STANDBY": "Valmiustila",
+        "WAKE_WORD_HINT": "Herätä minut sanomalla \"%s\".",
         "CONNECT_TO": "Yhdistä ",
         "CONNECTING": "Yhdistetään...",
         "CONNECTED_TO": "Yhdistetty ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "Ladataan resursseja...",
         "PLEASE_WAIT": "Odota hetki...",
         "FOUND_NEW_ASSETS": "Löydetty uusia resursseja: %s",
-        "HELLO_MY_FRIEND": "Hei, ystäväni!"
+        "HELLO_MY_FRIEND": "Hei, ystäväni!",
+        "CONNECTION_SUCCESSFUL": "Yhteys onnistui",
+        "FLIGHT_MODE_OFF": "Lentotila on pois päältä",
+        "FLIGHT_MODE_ON": "Lentotila on päällä",
+        "MODEM_INIT_ERROR": "Modeemin alustus epäonnistui"
     }
 }

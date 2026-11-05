@@ -1,0 +1,19 @@
+{
+    "type": "es3c28p-kendev",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "es3c28p-kendev",
+            "sdkconfig_append": [
+                "CONFIG_BOARD_TYPE_ES3C28P_KENDEV=y",
+                "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"",
+                "CONFIG_SPIRAM_MODE_OCT=y",
+                "CONFIG_LV_FONT_MONTSERRAT_14=y",
+                "CONFIG_LV_FONT_MONTSERRAT_28=y",
+                "CONFIG_LV_FONT_MONTSERRAT_48=y",
+                "CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y"
+            ]
+        }
+    ]
+}

@@ -18,6 +18,7 @@
         "SWITCH_TO_WIFI_NETWORK": "Wi-Fi पर स्विच कर रहे हैं...",
         "SWITCH_TO_4G_NETWORK": "4G पर स्विच कर रहे हैं...",
         "STANDBY": "स्टैंडबाय",
+        "WAKE_WORD_HINT": "मुझे जगाने के लिए \"%s\" कहें।",
         "CONNECT_TO": "कनेक्ट करें ",
         "CONNECTING": "कनेक्ट हो रहे हैं...",
         "CONNECTED_TO": "कनेक्ट हो गए ",
@@ -50,6 +51,10 @@
         "LOADING_ASSETS": "संसाधन लोड हो रहे हैं...",
         "PLEASE_WAIT": "कृपया प्रतीक्षा करें...",
         "FOUND_NEW_ASSETS": "नए संसाधन मिले: %s",
-        "HELLO_MY_FRIEND": "नमस्ते, मेरे दोस्त!"
+        "HELLO_MY_FRIEND": "नमस्ते, मेरे दोस्त!",
+        "CONNECTION_SUCCESSFUL": "कनेक्शन सफल",
+        "FLIGHT_MODE_OFF": "फ़्लाइट मोड बंद है",
+        "FLIGHT_MODE_ON": "फ़्लाइट मोड चालू है",
+        "MODEM_INIT_ERROR": "मॉडेम आरंभीकरण विफल"
     }
 }
