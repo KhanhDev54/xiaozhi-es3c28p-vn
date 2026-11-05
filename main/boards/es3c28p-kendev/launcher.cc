@@ -192,6 +192,51 @@ static std::string GroupDigits(const std::string& s) {
     return o;
 }
 
+
+// QR codes: LVGL's own qrcode lib clashes with the copy of qrcodegen linked by esp_emote_gfx,
+// so use that copy directly (Nayuki qrcodegen C API) and draw into a canvas.
+extern "C" {
+bool qrcodegen_encodeText(const char* text, uint8_t tempBuffer[], uint8_t qrcode[], int ecl, int minVersion,
+                          int maxVersion, int mask, bool boostEcl);
+int qrcodegen_getSize(const uint8_t qrcode[]);
+bool qrcodegen_getModule(const uint8_t qrcode[], int x, int y);
+}
+
+static lv_obj_t* QrCanvas(lv_obj_t* parent, const std::string& text, int size, lv_color_t dark, lv_color_t light) {
+    const int kMaxVersion = 15;
+    const size_t kLen = (size_t)((kMaxVersion * 4 + 17) * (kMaxVersion * 4 + 17) + 7) / 8 + 1;
+    std::vector<uint8_t> qr(kLen), tmp(kLen);
+    lv_obj_t* canvas = lv_canvas_create(parent);
+    void* buf = heap_caps_malloc((size_t)size * size * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (buf == nullptr) return canvas;
+    lv_canvas_set_buffer(canvas, buf, size, size, LV_COLOR_FORMAT_RGB565);
+    lv_obj_add_event_cb(canvas, [](lv_event_t* e) {
+        heap_caps_free(lv_event_get_user_data(e));
+    }, LV_EVENT_DELETE, buf);
+    lv_canvas_fill_bg(canvas, light, LV_OPA_COVER);
+    if (!qrcodegen_encodeText(text.c_str(), tmp.data(), qr.data(), 1 /* MEDIUM */, 1, kMaxVersion,
+                              -1 /* AUTO */, true)) {
+        ESP_LOGW(TAG, "QR encode failed (%u bytes)", (unsigned)text.size());
+        return canvas;
+    }
+    int n = qrcodegen_getSize(qr.data());
+    int scale = size / n;
+    if (scale < 1) scale = 1;
+    int off = (size - n * scale) / 2;
+    for (int y = 0; y < n; y++) {
+        for (int x = 0; x < n; x++) {
+            if (!qrcodegen_getModule(qr.data(), x, y)) continue;
+            for (int dy = 0; dy < scale; dy++) {
+                for (int dx = 0; dx < scale; dx++) {
+                    int px = off + x * scale + dx, py = off + y * scale + dy;
+                    if (px < size && py < size) lv_canvas_set_px(canvas, px, py, dark, LV_OPA_COVER);
+                }
+            }
+        }
+    }
+    return canvas;
+}
+
 // ---------------------------------------------------------------- lifecycle
 
 void Launcher::Start(Display* display, Backlight* backlight) {
@@ -672,11 +717,7 @@ static void DrawIcon(lv_obj_t* tile, const AppInfo& a, const lv_font_t* f28) {
         }
         case kIconQr: {
             static const char* kData = "KenDev";
-            lv_obj_t* q = lv_qrcode_create(tile);
-            lv_qrcode_set_size(q, 30);
-            lv_qrcode_set_dark_color(q, lv_color_white());
-            lv_qrcode_set_light_color(q, lv_color_hex(a.c2));
-            lv_qrcode_update(q, kData, 6);
+            lv_obj_t* q = QrCanvas(tile, kData, 30, lv_color_white(), lv_color_hex(a.c1));
             lv_obj_center(q);
             break;
         }
@@ -1658,11 +1699,7 @@ void Launcher::AppQr() {
     lv_obj_t* white = Card(app_, 8, 32, 172, 172, 0xFFFFFF);
     lv_obj_add_flag(white, LV_OBJ_FLAG_GESTURE_BUBBLE);
     std::string payload = vietqr::BuildPayload(a.bin, a.number, qr_amount_, "");
-    lv_obj_t* q = lv_qrcode_create(white);
-    lv_qrcode_set_size(q, 160);
-    lv_qrcode_set_dark_color(q, lv_color_black());
-    lv_qrcode_set_light_color(q, lv_color_white());
-    lv_qrcode_update(q, payload.c_str(), payload.size());
+    lv_obj_t* q = QrCanvas(white, payload, 164, lv_color_black(), lv_color_white());
     lv_obj_center(q);
 
     std::string bank = vietqr::BankName(a.bin);
@@ -1865,11 +1902,7 @@ void Launcher::AppSettings() {
     } else {
         lv_obj_t* white = Card(app_, 8, 36, 150, 150, 0xFFFFFF);
         lv_obj_add_flag(white, LV_OBJ_FLAG_GESTURE_BUBBLE);
-        lv_obj_t* q = lv_qrcode_create(white);
-        lv_qrcode_set_size(q, 138);
-        lv_qrcode_set_dark_color(q, lv_color_black());
-        lv_qrcode_set_light_color(q, lv_color_white());
-        lv_qrcode_update(q, url.c_str(), url.size());
+        lv_obj_t* q = QrCanvas(white, url, 144, lv_color_black(), lv_color_white());
         lv_obj_center(q);
         app_dynamic_ = q;
         auto& wifi = WifiManager::GetInstance();
