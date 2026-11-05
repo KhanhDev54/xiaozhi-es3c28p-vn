@@ -195,7 +195,7 @@ lv_obj_t* Launcher::NewPanel() {
     lv_obj_set_style_bg_color(p, lv_color_hex(kBg), 0);
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(p, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_HIDDEN));
     lv_obj_add_event_cb(p, OnGesture, LV_EVENT_GESTURE, this);
     return p;
 }
@@ -208,7 +208,7 @@ static lv_obj_t* Card(lv_obj_t* parent, int x, int y, int w, int h) {
     lv_obj_set_style_bg_color(c, lv_color_hex(kCard), 0);
     lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(c, 10, 0);
-    lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(c, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
     return c;
 }
 
@@ -355,7 +355,7 @@ void Launcher::BuildHome() {
         lv_obj_set_size(cell, cw - 1, 30);
         lv_obj_set_pos(cell, gx + c * cw, gy + 18 + r * 31);
         lv_obj_set_style_radius(cell, 6, 0);
-        lv_obj_clear_flag(cell, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(cell, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_t* d = Label(cell, &lv_font_montserrat_14, kText, "");
         lv_obj_align(d, LV_ALIGN_TOP_MID, 0, 0);
         lv_obj_t* l = Label(cell, &lv_font_montserrat_14, kMuted, "");
@@ -393,7 +393,7 @@ void Launcher::BuildMenu() {
         lv_obj_set_style_bg_color(tile, lv_color_hex(kApps[i].c1), 0);
         lv_obj_set_style_bg_grad_color(tile, lv_color_hex(kApps[i].c2), 0);
         lv_obj_set_style_bg_grad_dir(tile, LV_GRAD_DIR_VER, 0);
-        lv_obj_clear_flag(tile, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(tile, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         if (kApps[i].icon) {
             lv_obj_t* ic = Label(tile, &font_material_symbols_30_4, 0xFFFFFF, kApps[i].icon);
             lv_obj_center(ic);

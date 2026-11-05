@@ -18,7 +18,7 @@ WeatherIcon::WeatherIcon(lv_obj_t* parent, int size) : size_(size) {
     box_ = lv_obj_create(parent);
     lv_obj_remove_style_all(box_);
     lv_obj_set_size(box_, size, size);
-    lv_obj_clear_flag(box_, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(box_, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
     for (auto& d : dots_) {
         d = lv_obj_create(box_);
         lv_obj_remove_style_all(d);
