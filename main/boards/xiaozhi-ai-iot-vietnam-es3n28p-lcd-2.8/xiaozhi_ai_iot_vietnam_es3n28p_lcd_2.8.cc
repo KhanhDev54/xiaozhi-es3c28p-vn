@@ -185,11 +185,11 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
     char* msg = (char*)malloc(96);
     if (msg == nullptr) return;
     if (ok) {
-      snprintf(msg, 96, "Cảm ứng OK (chip %02X/%02X)", chip, vend);
+      snprintf(msg, 96, "Touch OK (chip %02X/%02X)", chip, vend);
     } else if (found) {
-      snprintf(msg, 96, "Lỗi khởi tạo cảm ứng (chip %02X/%02X)", chip, vend);
+      snprintf(msg, 96, "Touch init error (chip %02X/%02X)", chip, vend);
     } else {
-      snprintf(msg, 96, "Không thấy chip cảm ứng (I2C 0x38)");
+      snprintf(msg, 96, "Touch chip not found (I2C 0x38)");
     }
     xTaskCreate([](void* arg) {
         char* m = static_cast<char*>(arg);
@@ -398,7 +398,7 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
               
               backlight->SetBrightness(new_brightness);
               auto display = board.GetDisplay();
-              display->ShowNotification("Độ sáng: " + std::to_string(new_brightness));
+              display->ShowNotification("Brightness: " + std::to_string(new_brightness));
             }
           }
           break;
@@ -428,7 +428,7 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
             
             backlight->SetBrightness(new_brightness);
             auto display = board.GetDisplay();
-            display->ShowNotification("Độ sáng: " + std::to_string(new_brightness));
+            display->ShowNotification("Brightness: " + std::to_string(new_brightness));
           }
           break;
         case TOUCH_GESTURE_SWIPE_DOWN:
@@ -456,11 +456,12 @@ class XiaozhiAIIoTEs3n28p : public WifiBoard {
         case TOUCH_GESTURE_TAP:
           {
             // Single tap: start / stop chatting (stop speaking when the assistant talks)
+            // (No Wi-Fi reset from touch: a tap while booting used to drop the board into
+            // Wi-Fi setup mode. Use the BOOT button for that.)
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-              ResetWifiConfiguration();
+            if (app.GetDeviceState() != kDeviceStateStarting) {
+              app.ToggleChatState();
             }
-            app.ToggleChatState();
           }
           break;
         case TOUCH_GESTURE_DOUBLE_TAP:
