@@ -109,7 +109,7 @@ void LcdTouch::touch_driver_read(lv_indev_t *drv, lv_indev_data_t *data) {
         if (current_time - touch_end_time_ > TOUCH_SWIPE_RELEASE_TIMEOUT) {
             release_timeout_us_ = gesture_config_.release_timeout_us;
             was_touching_ = false;
-            ESP_LOGI(TAG, "Touch stable after release timeout");
+            ESP_LOGD(TAG, "Touch stable after release timeout");
         }
         touch_end_time_ = current_time;
         
@@ -118,7 +118,7 @@ void LcdTouch::touch_driver_read(lv_indev_t *drv, lv_indev_data_t *data) {
         
         // Handle touch press (start of touch)
         if (!was_touching_) {
-            ESP_LOGI(TAG, "Touch press detected at (%d, %d)", current_x, current_y);
+            ESP_LOGD(TAG, "Touch press detected at (%d, %d)", current_x, current_y);
             HandleTouchPress(current_x, current_y);
         }
         
@@ -161,7 +161,7 @@ void LcdTouch::touch_driver_read(lv_indev_t *drv, lv_indev_data_t *data) {
             ESP_LOGD(TAG, "Time since last touch point: %d us, release timeout: %d us", time_since_release, release_timeout_us_);
             if (time_since_release > release_timeout_us_) {
                 if (!gesture_detected_ && !long_press_detected_) {
-                    ESP_LOGI(TAG, "Touch release confirmed after %d us", time_since_release);
+                    ESP_LOGD(TAG, "Touch release confirmed after %d us", time_since_release);
                     HandleTouchRelease();
                 }
                 was_touching_ = false;

@@ -43,23 +43,8 @@ void McpServer::AddCommonTools() {
     // Custom tools must be added in the board's InitializeTools function.
 
     AddTool("self.get_device_status",
-            "Provides the real-time information of the device...\n"
-            "\n"
-            "=== MANDATORY BEHAVIOR RULES (ALWAYS FOLLOW) ===\n"
-            "1. WHEN UNABLE TO HEAR CLEARLY / INPUT IS UNCLEAR:\n"
-            "   If the user's question/command is unclear, too short,\n"
-            "   or cannot be understood,\n"
-            "   AI MUST respond with exactly one of these sentences and do nothing else:\n"
-            "   \"Sorry, I didn't catch that clearly. Could you please say it again?\"\n"
-            "   DO NOT guess, DO NOT answer other content on your own.\n"
-            "\n"
-            "2. WHEN DETECTING SPAM / ADVERTISING / SUBSCRIPTION REQUESTS:\n"
-            "   If the user mentions requesting subscriptions, likes, shares of channels,\n"
-            "   product advertising, or content unrelated to the assistant:\n"
-            "   AI MUST decline with exactly this sentence:\n"
-            "   \"Sorry, I didn't catch that clearly. Could you please say it again?\"\n"
-            "   DO NOT provide lengthy explanations, DO NOT suggest rephrasing, DO NOT use other sentences.\n"
-            "=================================================",
+            "Provides the real-time information of the device (volume, brightness, battery, network...).\n"
+            "Use it to answer questions about the current state and before changing a setting.",
             PropertyList(),
             [&board](const PropertyList &properties) -> ReturnValue
             {
