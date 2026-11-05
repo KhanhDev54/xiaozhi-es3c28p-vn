@@ -158,7 +158,7 @@ void LcdTouch::touch_driver_read(lv_indev_t *drv, lv_indev_data_t *data) {
         if (was_touching_) { // Debounce release
             int64_t current_time = esp_timer_get_time();
             int32_t time_since_release = current_time - touch_end_time_;
-            ESP_LOGI(TAG, "Time since last touch point: %d us, release timeout: %d us", time_since_release, release_timeout_us_);
+            ESP_LOGD(TAG, "Time since last touch point: %d us, release timeout: %d us", time_since_release, release_timeout_us_);
             if (time_since_release > release_timeout_us_) {
                 if (!gesture_detected_ && !long_press_detected_) {
                     ESP_LOGI(TAG, "Touch release confirmed after %d us", time_since_release);

@@ -263,9 +263,14 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         .io_handle = panel_io_,
         .panel_handle = panel_,
         .control_handle = nullptr,
-        .buffer_size = static_cast<uint32_t>(width_ * 40),
-        .double_buffer = true,
-        .trans_size = 40,
+        // Small draw buffer in internal DMA RAM. With the buffers in PSRAM the SPI
+        // driver had to allocate an internal bounce buffer on every flush; when
+        // internal RAM ran low (Wi-Fi + BLE + wake word) that allocation failed,
+        // the flush never completed and the LVGL task hung (screen frozen,
+        // task watchdog, wake word starved).
+        .buffer_size = static_cast<uint32_t>(width_ * 20),
+        .double_buffer = false,
+        .trans_size = 0,
         .hres = static_cast<uint32_t>(width_),
         .vres = static_cast<uint32_t>(height_),
         .monochrome = false,
@@ -277,7 +282,7 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         .color_format = LV_COLOR_FORMAT_RGB565,
         .flags = {
             .buff_dma = 1,
-            .buff_spiram = 1,
+            .buff_spiram = 0,
             .sw_rotate = 0,
             .swap_bytes = 1,
             .full_refresh = 0,
