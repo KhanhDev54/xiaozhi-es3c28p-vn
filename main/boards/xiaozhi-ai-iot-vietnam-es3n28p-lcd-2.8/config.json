@@ -35,7 +35,10 @@
                 "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
                 "CONFIG_SR_WN_WN9_SOPHIA_TTS=y",
                 "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m_single_app.csv\"",
-                "CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y"
+                "CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y",
+                "CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=128",
+                "CONFIG_BT_CTRL_BLE_MAX_ACT=2",
+                "CONFIG_BT_NIMBLE_GATT_MAX_PROCS=2"
             ]
         }
     ]
