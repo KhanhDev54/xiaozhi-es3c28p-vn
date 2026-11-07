@@ -80,6 +80,7 @@ private:
     // apps
     void AppComingSoon(const char* text);
     void AppFm();
+    void AppMusic();
     void AppTimer();
     void AppQr();
     void AppHistory();

@@ -269,7 +269,7 @@ void Launcher::RunAsync(std::function<void()> fn) {
             (*f)();
             delete f;
             vTaskDelete(nullptr);
-        }, "launcher_job", 8192, heap_fn, 3, nullptr) != pdPASS) {
+        }, "launcher_job", 12288, heap_fn, 3, nullptr) != pdPASS) {
         delete heap_fn;
     }
 }
@@ -1505,8 +1505,7 @@ void Launcher::OpenApp(int id) {
             AppComingSoon("Khung ảnh Google Photos sẽ có ở bản sau: chiếu album khi loa rảnh, kèm giờ và thời tiết.");
             break;
         case kAppMusic:
-            StatusBar(app_, "Nhạc", &app_time_);
-            AppComingSoon("Nghe nhạc Zing MP3 / YouTube sẽ có ở bản sau. Hiện bạn có thể nghe radio ở ứng dụng FM.");
+            AppMusic();
             break;
         case kAppHud:
             StatusBar(app_, "Waze HUD", &app_time_);
@@ -1564,6 +1563,66 @@ void Launcher::AppComingSoon(const char* text) {
     lv_obj_set_width(body, W - 40);
     lv_obj_set_style_text_align(body, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(body, LV_ALIGN_TOP_MID, 0, 100);
+}
+
+// Music stations from the public Radio Browser directory, by genre
+struct MusicGenre {
+    const char* label;
+    const char* query;
+    bool vietnam;
+};
+static const MusicGenre kGenres[] = {
+    {"Nhạc Việt", "music", true}, {"Bolero", "bolero", false}, {"Nhạc trẻ", "vpop", false},
+    {"Không lời", "instrumental", false}, {"Lo-fi", "lofi", false}, {"Jazz", "jazz", false},
+};
+
+void Launcher::AppMusic() {
+    StatusBar(app_, "Nhạc · Đài trực tuyến", &app_time_);
+    auto& radio = RadioPlayer::GetInstance();
+    bool playing = radio.IsPlaying();
+    lv_obj_t* now = Card(app_, 8, 36, W - 16, 50, playing ? 0x3B0764 : kCard);
+    lv_obj_t* name = Label(now, nullptr, playing ? kText : kMuted,
+                           playing ? radio.CurrentName().c_str() : "Chọn thể loại hoặc nói \"mở nhạc bolero\"");
+    lv_obj_set_width(name, 210);
+    lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+    lv_obj_align(name, LV_ALIGN_LEFT_MID, 12, 0);
+    if (playing) {
+        lv_obj_t* stop = Button(now, 0, 0, 44, 36, LV_SYMBOL_STOP, 0xDB2777, 0xFFFFFF, [](lv_event_t* e) {
+            auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+            self->RunAsync([]() { RadioPlayer::GetInstance().Stop(); });
+        });
+        lv_obj_set_style_radius(stop, 18, 0);
+        lv_obj_set_style_text_font(lv_obj_get_child(stop, 0), f14_, 0);
+        lv_obj_align(stop, LV_ALIGN_RIGHT_MID, -8, 0);
+    }
+    int n = sizeof(kGenres) / sizeof(kGenres[0]);
+    for (int i = 0; i < n; i++) {
+        int col = i % 3, row = i / 3;
+        lv_obj_t* b = Button(app_, 8 + col * 104, 94 + row * 48, 98, 42, kGenres[i].label, kCard2, kText,
+                             [](lv_event_t* e) {
+            auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+            int idx = (int)(intptr_t)lv_obj_get_user_data(lv_event_get_current_target_obj(e));
+            self->RunAsync([idx]() {
+                auto& r = RadioPlayer::GetInstance();
+                std::vector<RadioPlayer::FoundStation> found;
+                std::string err;
+                if (!r.SearchStations(kGenres[idx].query, kGenres[idx].vietnam, found, err) || found.empty()) {
+                    r.SearchStations(kGenres[idx].query, !kGenres[idx].vietnam, found, err);
+                }
+                if (!found.empty()) {
+                    r.PlayUrl(found[0].url, found[0].name, found[0].codec);
+                } else {
+                    Application::GetInstance().Schedule([]() {
+                        auto display = Board::GetInstance().GetDisplay();
+                        if (display) display->ShowNotification("Không tìm được đài", 3000);
+                    });
+                }
+            });
+        });
+        lv_obj_set_user_data(b, (void*)(intptr_t)i);
+    }
+    lv_obj_t* note = Label(app_, nullptr, kMuted, "Nguồn: danh bạ Radio Browser");
+    lv_obj_align(note, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
 void Launcher::AppFm() {
