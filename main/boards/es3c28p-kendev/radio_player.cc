@@ -69,6 +69,13 @@ std::string RadioPlayer::CurrentName() {
     return name_;
 }
 
+void RadioPlayer::Current(std::string& url, std::string& name, std::string& codec_hint) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    url = url_;
+    name = name_;
+    codec_hint = codec_hint_;
+}
+
 bool RadioPlayer::Play(const std::string& station_key) {
     const Station* st = FindStation(station_key);
     if (st == nullptr) return false;
