@@ -76,6 +76,8 @@ private:
     void BuildNightOverlay();
     void BuildKeypadOverlay();
     void HandleNewTx();
+    void UpdateAnnounce(int state, int64_t now_us);  // drives the spoken transaction
+    void FinishAnnounce();
 
     // apps
     void AppComingSoon(const char* text);
@@ -124,6 +126,17 @@ private:
     int bank_rev_shown_ = -1;
     int tx_rev_seen_ = 0;
     std::atomic<bool> tx_pending_{false};
+
+    // Spoken transaction: "ting", then the assistant reads one sentence, then the
+    // conversation is closed and the radio (if it was playing) starts again
+    enum class Announce { kNone, kWait, kRun };
+    Announce ann_ = Announce::kNone;
+    int64_t ann_at_us_ = 0;          // kWait: when to start; kRun: give up after
+    bool ann_busy_seen_ = false;     // the device left idle for this announcement
+    bool ann_spoke_ = false;
+    std::string ann_text_;
+    int ann_restore_volume_ = -1;    // night: volume to put back afterwards
+    std::string radio_url_, radio_name_, radio_hint_;  // stream to resume ("" = none)
 
     lv_obj_t* root_ = nullptr;
     lv_obj_t* home_ = nullptr;     // tileview

@@ -315,7 +315,10 @@ void Launcher::Tick() {
     }
     if (mode_ == Mode::kCalibrate) return;
 
-    if (!idle && !am.IsRinging()) {
+    UpdateAnnounce(state, now_us);
+
+    // A conversation hides the launcher; a transaction being read keeps its popup up
+    if (!idle && !am.IsRinging() && ann_ == Announce::kNone) {
         if (mode_ != Mode::kHidden) {
             if (mode_ == Mode::kOverlay) CloseOverlay();
             Show(Mode::kHidden);
@@ -1227,7 +1230,29 @@ void Launcher::HandleNewTx() {
     if (!BankStore::GetInstance().Latest(tx)) return;
     auto s = BankStore::GetInstance().Settings();
     if (s.read_tx) {
-        Application::GetInstance().Schedule([]() { Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP); });
+        auto& radio = RadioPlayer::GetInstance();
+        bool radio_on = radio.IsPlaying();
+        if (radio_on && ann_ == Announce::kNone) radio.Current(radio_url_, radio_name_, radio_hint_);
+        // Money in is read aloud (once the "ting" has played); money out only gets the "ting"
+        if (ann_ == Announce::kNone) ann_text_.clear();
+        if (tx.amount > 0) {
+            std::string who = tx.bank.empty() ? "Tài khoản" : tx.bank;
+            ann_text_ = "Đọc to đúng một câu thông báo sau, không nói thêm gì khác: \"" + who + " vừa nhận " +
+                        FormatThousands(tx.amount) + " đồng.\"";
+        }
+        // The radio stops for the "ting" and comes back once the reading is over
+        if (tx.amount > 0 || radio_on) {
+            if (ann_ == Announce::kNone) {
+                ann_ = Announce::kWait;
+                ann_busy_seen_ = false;
+                ann_spoke_ = false;
+            }
+            if (ann_ == Announce::kWait) ann_at_us_ = esp_timer_get_time() + 1100000;
+        }
+        RunAsync([radio_on]() {
+            if (radio_on) RadioPlayer::GetInstance().Stop();
+            Application::GetInstance().Schedule([]() { Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP); });
+        });
     }
     AlarmManager::GetInstance().WakeScreen(15);
     night_wake_until_us_ = 0;
@@ -1243,6 +1268,64 @@ void Launcher::HandleNewTx() {
     BuildTxOverlay(tx, false);
     ShowOverlay(Overlay::kTx);
     overlay_until_us_ = esp_timer_get_time() + (int64_t)kTxPopupSeconds * 1000000;
+}
+
+void Launcher::UpdateAnnounce(int state_int, int64_t now_us) {
+    if (ann_ == Announce::kNone) return;
+    auto& app = Application::GetInstance();
+    auto state = static_cast<DeviceState>(state_int);
+    if (ann_ == Announce::kWait) {
+        if (now_us < ann_at_us_) return;
+        if (ann_text_.empty()) {  // nothing to read (money out): just bring the radio back
+            FinishAnnounce();
+            return;
+        }
+        if (state != kDeviceStateIdle) {
+            // Someone is talking to the assistant: keep the "ting" only
+            if (now_us > ann_at_us_ + 5000000) FinishAnnounce();
+            return;
+        }
+        auto* codec = Board::GetInstance().GetAudioCodec();
+        if (AlarmManager::GetInstance().IsNightActive() && codec) {
+            ann_restore_volume_ = codec->output_volume();
+            codec->SetOutputVolume(ann_restore_volume_ / 2);
+        }
+        ESP_LOGI(TAG, "Reading transaction aloud");
+        app.WakeWordInvoke(ann_text_);
+        ann_ = Announce::kRun;
+        ann_at_us_ = now_us + 30000000;
+        return;
+    }
+    // kRun
+    if (state != kDeviceStateIdle) ann_busy_seen_ = true;
+    if (state == kDeviceStateSpeaking) ann_spoke_ = true;
+    if (ann_spoke_ && state == kDeviceStateListening) {
+        // Sentence done: close the conversation instead of waiting for an answer
+        app.Schedule([]() { Application::GetInstance().StopListening(); });
+        return;
+    }
+    bool done = ann_busy_seen_ && state == kDeviceStateIdle;
+    if (now_us > ann_at_us_) {
+        if (state == kDeviceStateListening) app.Schedule([]() { Application::GetInstance().StopListening(); });
+        done = true;
+    }
+    if (done) FinishAnnounce();
+}
+
+void Launcher::FinishAnnounce() {
+    ann_ = Announce::kNone;
+    if (ann_restore_volume_ >= 0) {
+        auto* codec = Board::GetInstance().GetAudioCodec();
+        if (codec) codec->SetOutputVolume(ann_restore_volume_);
+        ann_restore_volume_ = -1;
+    }
+    if (!radio_url_.empty()) {
+        std::string url = radio_url_, name = radio_name_, hint = radio_hint_;
+        radio_url_.clear();
+        ESP_LOGI(TAG, "Resuming radio: %s", name.c_str());
+        // PlayUrl waits for the device to be idle before connecting
+        RunAsync([url, name, hint]() { RadioPlayer::GetInstance().PlayUrl(url, name, hint); });
+    }
 }
 
 // ---------------------------------------------------------------- overlays

@@ -32,7 +32,7 @@ struct QrAccount {
 
 struct KendevSettings {
     bool auto_home = true;   // return to the clock after an app is idle
-    bool read_tx = true;     // announce transactions (sound)
+    bool read_tx = true;     // "ting" + read incoming amounts aloud
     bool rotate180 = false;
     int led_color = 0;       // index into the control panel palette, 0 = off
     std::string token;       // LAN API token
