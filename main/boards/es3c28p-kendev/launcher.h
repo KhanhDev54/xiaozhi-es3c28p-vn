@@ -87,6 +87,10 @@ private:
     void AppSystem();
     void AppSettings();
     void AppWifi();
+    void AppHud();             // Waze HUD: setup help, or the live navigation view
+    void HudRefresh();         // 4 times a second while the HUD is open
+    void HudDrawArrow(int trn, int exit);
+    static void HudTimerCb(lv_timer_t* t);
 
     // widgets
     lv_obj_t* NewPanel();  // full-screen panel inside root_
@@ -188,6 +192,34 @@ private:
     uint64_t qr_amount_ = 0;
     uint64_t keypad_value_ = 0;
     lv_obj_t* keypad_lbl_ = nullptr;
+
+    // Waze HUD
+    lv_timer_t* hud_timer_ = nullptr;
+    bool hud_live_ = false;            // live view built (else the setup help)
+    bool hud_was_connected_ = false;
+    int hud_rev_ = -1;
+    int hud_arrow_key_ = -1;
+    int hud_dst_start_ = 0;
+    bool hud_stale_ = false;
+    lv_obj_t* hud_body_ = nullptr;
+    lv_obj_t* hud_clock_ = nullptr;
+    lv_obj_t* hud_top_ = nullptr;
+    lv_obj_t* hud_lanes_ = nullptr;
+    lv_obj_t* hud_arrow_ = nullptr;
+    lv_obj_t* hud_dist_ = nullptr;
+    lv_obj_t* hud_dist_unit_ = nullptr;
+    lv_obj_t* hud_dist_bar_ = nullptr;
+    lv_obj_t* hud_arc_ = nullptr;
+    lv_obj_t* hud_speed_ = nullptr;
+    lv_obj_t* hud_limit_ = nullptr;
+    lv_obj_t* hud_limit_lbl_ = nullptr;
+    lv_obj_t* hud_chip_ = nullptr;
+    lv_obj_t* hud_chip_lbl_ = nullptr;
+    lv_obj_t* hud_alert_ = nullptr;
+    lv_obj_t* hud_alert_dist_ = nullptr;
+    lv_obj_t* hud_more_ = nullptr;
+    lv_obj_t* hud_street_ = nullptr;
+    lv_point_precise_t hud_pts_[4][10] = {};  // lv_line keeps a pointer to its points
 
     // calibration
     lv_obj_t* calib_target_ = nullptr;
