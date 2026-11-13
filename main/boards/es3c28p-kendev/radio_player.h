@@ -38,6 +38,8 @@ public:
     void Stop();
     bool IsPlaying() const { return playing_; }
     std::string CurrentName();
+    // Current stream, so it can be restarted later (e.g. after reading a transaction)
+    void Current(std::string& url, std::string& name, std::string& codec_hint);
 
     // Search the Radio Browser directory. vietnam_only: stations in Vietnam or in Vietnamese.
     bool SearchStations(const std::string& query, bool vietnam_only, std::vector<FoundStation>& out,
