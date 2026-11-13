@@ -24,6 +24,7 @@
 #include "board.h"
 #include "display.h"
 #include "ft6336_touch.h"
+#include "hud_link.h"
 #include "info_services.h"
 #include "lan_server.h"
 #include "lunar_calendar.h"
@@ -277,7 +278,10 @@ void Launcher::RunAsync(std::function<void()> fn) {
 bool Launcher::AutoHomeAllowed() const {
     if (!BankStore::GetInstance().Settings().auto_home) return false;
     if (mode_ == Mode::kMenu || mode_ == Mode::kControl) return true;
-    if (mode_ == Mode::kApp) return app_id_ != kAppQr && app_id_ != kAppFm;
+    if (mode_ == Mode::kApp) {
+        if (app_id_ == kAppHud && HudLink::GetInstance().connected()) return false;
+        return app_id_ != kAppQr && app_id_ != kAppFm;
+    }
     return false;
 }
 
@@ -297,7 +301,10 @@ void Launcher::Tick() {
             InfoServices::GetInstance().RefreshWeather(1800);
         }
     }
-    if (tick_ % 5 == 0) LanServer::GetInstance().EnsureStarted();
+    if (tick_ % 5 == 0) {
+        LanServer::GetInstance().EnsureStarted();
+        HudLink::GetInstance().EnsureStarted();
+    }
 
     DisplayLockGuard lock(display_);
     if (root_ == nullptr) {
@@ -325,17 +332,24 @@ void Launcher::Tick() {
         CloseOverlay();
     }
 
+    // Back from a conversation: the HUD while the phone is linked, else the clock
+    bool hud_on = HudLink::GetInstance().connected();
     if (mode_ == Mode::kHidden && now_us >= busy_until_us_) {
-        Show(Mode::kHome);
+        if (hud_on) OpenApp(kAppHud);
+        else Show(Mode::kHome);
     }
+    // Phone just linked for navigation: open the HUD from the clock or the menu
+    if (hud_on && !hud_was_connected_ && (mode_ == Mode::kHome || mode_ == Mode::kMenu)) OpenApp(kAppHud);
+    hud_was_connected_ = hud_on;
 
     // New bank transaction
     if (tx_pending_.exchange(false)) HandleNewTx();
 
     // Night screen
     bool night = am.IsNightActive() || now_us < night_wake_until_us_;
-    if (night && overlay_ != Overlay::kNight && overlay_ != Overlay::kTx && overlay_ != Overlay::kReceived &&
-        mode_ != Mode::kHidden) {
+    bool driving = mode_ == Mode::kApp && app_id_ == kAppHud && hud_on;
+    if (night && !driving && overlay_ != Overlay::kNight && overlay_ != Overlay::kTx &&
+        overlay_ != Overlay::kReceived && mode_ != Mode::kHidden) {
         ShowOverlay(Overlay::kNight);
     } else if (!night && overlay_ == Overlay::kNight) {
         CloseOverlay();
@@ -1508,8 +1522,7 @@ void Launcher::OpenApp(int id) {
             AppMusic();
             break;
         case kAppHud:
-            StatusBar(app_, "Waze HUD", &app_time_);
-            AppComingSoon("Dẫn đường kiểu HUD (mũi tên rẽ, tốc độ, camera) sẽ có ở bản sau.");
+            AppHud();
             break;
         case kAppFm: AppFm(); break;
         case kAppTimer: AppTimer(); break;
@@ -2078,5 +2091,540 @@ void Launcher::CalibrationStep() {
         calib_step_ = 0;
         lv_obj_set_pos(calib_target_, 30 - 12, 30 - 12);
         lv_obj_remove_flag(calib_target_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+// ---------------------------------------------------------------- Waze HUD
+
+// Alert codes of the HUD Link protocol (HLP/1) -> chip text, chip colour, Vietnamese name
+struct HudAlertInfo {
+    const char* chip;
+    uint32_t color;
+    const char* name;
+};
+
+static HudAlertInfo HudAlertText(int k) {
+    static const uint32_t kCam = 0xDC2626, kBan = 0xB91C1C, kWarn = 0xF59E0B, kInfo = 0x2563EB;
+    switch (k) {
+        case 1: return {"CSGT", kInfo, "Cảnh sát giao thông"};
+        case 2: return {"CAM", kCam, "Camera tốc độ"};
+        case 3: return {"CAM", kCam, "Camera đèn đỏ"};
+        case 4: return {"!", kWarn, "Nguy hiểm"};
+        case 5: return {"!", kCam, "Tai nạn"};
+        case 6: return {"KẸT", kWarn, "Kẹt xe"};
+        case 7: return {"CẤM", kBan, "Đường đóng"};
+        case 8: return {"", kBan, "Giới hạn tốc độ"};
+        case 9: return {"CẤM", kBan, "Cấm vượt"};
+        case 10: return {"HẾT", 0x475569, "Hết cấm vượt"};
+        case 11: return {"!", kWarn, "Giao cắt đường sắt"};
+        case 12: return {"PHÍ", kInfo, "Trạm thu phí"};
+        case 13: return {"!", kWarn, "Xe dừng trên đường"};
+        case 14: return {"!", kWarn, "Công trường"};
+        case 15: return {"!", kWarn, "Ổ gà"};
+        case 16: return {"!", kWarn, "Thời tiết xấu"};
+        case 17: return {"!", kWarn, "Làn bị chắn"};
+        case 18: return {"!", kWarn, "Đường nguy hiểm"};
+        case 19: return {"i", kInfo, "Lối ra cao tốc"};
+        case 20: return {"i", kInfo, "Trạm dừng nghỉ cao tốc"};
+        case 21: return {"i", kInfo, "Trạm dừng nghỉ"};
+        case 22: return {"HẾT", 0x475569, "Hết hạn chế tốc độ"};
+        case 23: return {"i", kInfo, "Bắt đầu khu dân cư"};
+        case 24: return {"i", kInfo, "Hết khu dân cư"};
+        case 25: return {"HẾT", 0x475569, "Hết mọi lệnh cấm"};
+        case 26: return {"CẤM", kBan, "Cấm ô tô"};
+        case 27: return {"CẤM", kBan, "Cấm xe máy"};
+        case 28: return {"CẤM", kBan, "Cấm rẽ trái"};
+        case 29: return {"CẤM", kBan, "Cấm rẽ phải"};
+        case 30: return {"CẤM", kBan, "Cấm quay đầu"};
+        case 31: return {"CẤM", kBan, "Cấm đi thẳng"};
+        case 32: return {"i", kInfo, "Bắt buộc đi thẳng"};
+        case 33: return {"i", kInfo, "Bắt buộc rẽ phải"};
+        case 34: return {"i", kInfo, "Bắt buộc rẽ trái"};
+        case 35: return {"i", kInfo, "Làn ô tô"};
+        case 36: return {"i", kInfo, "Làn xe máy"};
+        case 37: return {"i", kInfo, "Đường một chiều"};
+        case 38: return {"CẤM", kBan, "Đường cấm"};
+        case 39: return {"CẤM", kBan, "Cấm rẽ kết hợp"};
+        case 40: return {"CAM", kCam, "Camera bắt dùng điện thoại"};
+        case 41: return {"CAM", 0x475569, "Camera giả"};
+        case 42: return {"CAM", kCam, "Camera dây an toàn"};
+        case 43: return {"CAM", kCam, "Camera khoảng cách"};
+        case 44: return {"CAM", kCam, "Camera làn xe buýt"};
+        case 45: return {"CAM", kCam, "Camera tiếng ồn"};
+        case 46: return {"CAM", kCam, "Camera biển dừng"};
+        case 47: return {"!", kWarn, "Động vật trên đường"};
+        case 48: return {"!", kWarn, "Vật cản trên đường"};
+        case 49: return {"!", kWarn, "Xác động vật"};
+        case 50: return {"!", kWarn, "Ngập nước"};
+        case 51: return {"!", kWarn, "Sương mù"};
+        case 52: return {"!", kWarn, "Mưa đá"};
+        case 53: return {"!", kWarn, "Tuyết"};
+        case 54: return {"!", kWarn, "Đường đóng băng"};
+        case 55: return {"!", kWarn, "Đường trơn"};
+        case 56: return {"!", kWarn, "Gờ giảm tốc"};
+        case 57: return {"!", kWarn, "Khu vực trường học"};
+        case 58: return {"!", kWarn, "Nhập làn"};
+        case 59: return {"!", kWarn, "Khúc cua nguy hiểm"};
+        case 60: return {"i", kInfo, "Đường rẽ nhánh"};
+        case 61: return {"!", kWarn, "Đèn tín hiệu hỏng"};
+        case 62: return {"!", kWarn, "Người đi xe đạp"};
+        case 63: return {"!", kWarn, "Xe ưu tiên"};
+        case 64: return {"!", kWarn, "Chú ý an toàn"};
+        case 65: return {"CẤM", kBan, "Cấm đi thẳng và rẽ phải"};
+        case 66: return {"CẤM", kBan, "Cấm rẽ trái và quay đầu"};
+        case 67: return {"CẤM", kBan, "Cấm đi thẳng và rẽ trái"};
+        case 68: return {"CẤM", kBan, "Cấm rẽ trái và rẽ phải"};
+        case 69: return {"CẤM", kBan, "Ô tô cấm rẽ trái, quay đầu"};
+        case 70: return {"CẤM", kBan, "Ô tô cấm rẽ phải, quay đầu"};
+        case 71: return {"CẤM", kBan, "Cấm rẽ phải và quay đầu"};
+        case 72: return {"CẤM", kBan, "Ô tô cấm rẽ trái"};
+        case 73: return {"CẤM", kBan, "Ô tô cấm rẽ phải"};
+        case 74: return {"CẤM", kBan, "Ô tô cấm quay đầu"};
+        case 75: return {"!", kWarn, "Đèn giao thông"};
+        default: return {"!", kWarn, "Cảnh báo"};
+    }
+}
+
+// 350 -> "350" "m", 1500 -> "1,5" "km", 12400 -> "12" "km"
+static void HudDistance(int m, std::string& num, std::string& unit) {
+    if (m < 0) m = 0;
+    if (m < 1000) {
+        if (m >= 100) m = (m + 5) / 10 * 10;
+        num = std::to_string(m);
+        unit = "m";
+        return;
+    }
+    unit = "km";
+    if (m >= 10000) {
+        num = std::to_string((m + 500) / 1000);
+        return;
+    }
+    int tenths = (m + 50) / 100;
+    num = std::to_string(tenths / 10) + "," + std::to_string(tenths % 10);
+}
+
+static std::string HudMinutes(int min) {
+    if (min < 60) return std::to_string(min) + " phút";
+    std::string s = std::to_string(min / 60) + " giờ";
+    if (min % 60) s += " " + std::to_string(min % 60) + " phút";
+    return s;
+}
+
+// Lane arrow for a direction mask (bits: 1 straight, 2/4/8 left, 16/32/64 right, 128 U-turn)
+static const char* HudLaneSymbol(int mask) {
+    if (mask & 1) return LV_SYMBOL_UP;
+    if (mask & (2 | 4 | 8)) return LV_SYMBOL_LEFT;
+    if (mask & (16 | 32 | 64)) return LV_SYMBOL_RIGHT;
+    if (mask & 128) return LV_SYMBOL_REFRESH;
+    return "";
+}
+
+void Launcher::HudTimerCb(lv_timer_t* t) {
+    static_cast<Launcher*>(lv_timer_get_user_data(t))->HudRefresh();
+}
+
+void Launcher::AppHud() {
+    auto& link = HudLink::GetInstance();
+    lv_obj_set_style_bg_color(app_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(app_, LV_OPA_COVER, 0);
+    hud_rev_ = -1;
+    hud_arrow_key_ = -1;
+    hud_stale_ = false;
+    hud_live_ = link.connected();
+    if (hud_timer_ == nullptr) hud_timer_ = lv_timer_create(HudTimerCb, 250, this);
+
+    if (!hud_live_) {
+        hud_body_ = nullptr;
+        lv_obj_t* title = Label(app_, nullptr, kText, "Dẫn đường Waze");
+        lv_obj_set_pos(title, 12, 8);
+        lv_obj_t* sub = Label(app_, f14_, kMuted, "Chưa kết nối · mở Waze Mod trên điện thoại");
+        lv_obj_set_pos(sub, 12, 36);
+        lv_obj_t* card = Card(app_, 8, 60, W - 16, 58, kCard);
+        lv_obj_t* cap = Label(card, f14_, kMuted, "Địa chỉ HUD Link (Wi-Fi WebSocket)");
+        lv_obj_set_pos(cap, 10, 6);
+        std::string url = link.Url();
+        lv_obj_t* addr = Label(card, nullptr, kAccent, url.empty() ? "Loa chưa có Wi-Fi" : url.c_str());
+        lv_obj_set_pos(addr, 10, 28);
+        lv_obj_t* steps = Label(app_, f14_, kText,
+                                "1. Bật điểm phát Wi-Fi của điện thoại và cho loa vào mạng đó "
+                                "(hoặc cả hai cùng một Wi-Fi).\n"
+                                "2. Waze Mod > Cài đặt Mod > Thiết bị > HUD Link.\n"
+                                "3. Chọn Wi-Fi WebSocket, nhập địa chỉ ở trên.");
+        lv_obj_set_width(steps, W - 24);
+        lv_obj_set_pos(steps, 12, 126);
+        return;
+    }
+
+    // Live view. hud_body_ holds everything that dims when the phone goes quiet.
+    hud_body_ = lv_obj_create(app_);
+    lv_obj_remove_style_all(hud_body_);
+    lv_obj_set_size(hud_body_, W, H);
+    lv_obj_remove_flag(hud_body_, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+
+    hud_clock_ = Label(app_, f14_, kMuted, "");
+    lv_obj_set_pos(hud_clock_, 8, 4);
+    hud_top_ = Label(app_, f14_, kMuted, "");
+    lv_obj_set_width(hud_top_, 220);
+    lv_label_set_long_mode(hud_top_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(hud_top_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(hud_top_, LV_ALIGN_TOP_MID, 0, 4);
+    hud_lanes_ = lv_obj_create(hud_body_);
+    lv_obj_remove_style_all(hud_lanes_);
+    lv_obj_set_size(hud_lanes_, 220, 22);
+    lv_obj_align(hud_lanes_, LV_ALIGN_TOP_MID, 0, 1);
+    lv_obj_set_flex_flow(hud_lanes_, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(hud_lanes_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(hud_lanes_, 3, 0);
+    lv_obj_add_flag(hud_lanes_, LV_OBJ_FLAG_HIDDEN);
+
+    // Left: manoeuvre arrow, distance and a bar that shrinks on the approach
+    hud_arrow_ = lv_obj_create(hud_body_);
+    lv_obj_remove_style_all(hud_arrow_);
+    lv_obj_set_size(hud_arrow_, 72, 72);
+    lv_obj_set_pos(hud_arrow_, 6, 34);
+    hud_dist_ = Label(hud_body_, f28_, kText, "");
+    lv_obj_set_pos(hud_dist_, 8, 112);
+    hud_dist_unit_ = Label(hud_body_, f14_, kText, "");
+    hud_dist_bar_ = lv_obj_create(hud_body_);
+    lv_obj_remove_style_all(hud_dist_bar_);
+    lv_obj_set_style_bg_color(hud_dist_bar_, lv_color_hex(0x3B82F6), 0);
+    lv_obj_set_style_bg_opa(hud_dist_bar_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hud_dist_bar_, 2, 0);
+    lv_obj_set_size(hud_dist_bar_, 0, 4);
+    lv_obj_set_pos(hud_dist_bar_, 8, 148);
+
+    // Centre: speed on a 270° gauge
+    hud_arc_ = lv_arc_create(hud_body_);
+    lv_obj_set_size(hud_arc_, 150, 150);
+    lv_obj_align(hud_arc_, LV_ALIGN_TOP_MID, 4, 30);
+    lv_arc_set_bg_angles(hud_arc_, 135, 45);
+    lv_arc_set_range(hud_arc_, 0, 120);
+    lv_arc_set_value(hud_arc_, 0);
+    lv_obj_remove_style(hud_arc_, nullptr, LV_PART_KNOB);
+    lv_obj_remove_flag(hud_arc_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(hud_arc_, 10, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(hud_arc_, 10, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(hud_arc_, lv_color_hex(0x1F2937), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(hud_arc_, lv_color_hex(kGreen), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(hud_arc_, false, LV_PART_INDICATOR);
+    hud_speed_ = Label(hud_arc_, &lv_font_montserrat_48, kText, "0");
+    lv_obj_align(hud_speed_, LV_ALIGN_CENTER, 0, -6);
+    lv_obj_t* kmh = Label(hud_arc_, f14_, kMuted, "km/h");
+    lv_obj_align(kmh, LV_ALIGN_CENTER, 0, 28);
+
+    // Right: speed limit sign
+    hud_limit_ = lv_obj_create(hud_body_);
+    lv_obj_remove_style_all(hud_limit_);
+    lv_obj_set_size(hud_limit_, 58, 58);
+    lv_obj_set_pos(hud_limit_, W - 64, 30);
+    lv_obj_set_style_radius(hud_limit_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(hud_limit_, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(hud_limit_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(hud_limit_, lv_color_hex(0xDC2626), 0);
+    lv_obj_set_style_border_width(hud_limit_, 6, 0);
+    hud_limit_lbl_ = Label(hud_limit_, f28_, 0x000000, "");
+    lv_obj_center(hud_limit_lbl_);
+    lv_obj_add_flag(hud_limit_, LV_OBJ_FLAG_HIDDEN);
+
+    // Bottom: nearest alert, or the street
+    hud_chip_ = lv_obj_create(hud_body_);
+    lv_obj_remove_style_all(hud_chip_);
+    lv_obj_set_height(hud_chip_, 24);
+    lv_obj_set_width(hud_chip_, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_hor(hud_chip_, 6, 0);
+    lv_obj_set_style_radius(hud_chip_, 6, 0);
+    lv_obj_set_style_bg_opa(hud_chip_, LV_OPA_COVER, 0);
+    lv_obj_set_pos(hud_chip_, 8, 206);
+    hud_chip_lbl_ = Label(hud_chip_, f14_, 0xFFFFFF, "");
+    lv_obj_center(hud_chip_lbl_);
+    hud_alert_ = Label(hud_body_, nullptr, kText, "");
+    lv_label_set_long_mode(hud_alert_, LV_LABEL_LONG_DOT);
+    hud_alert_dist_ = Label(hud_body_, nullptr, 0xF97316, "");
+    hud_more_ = Chip(hud_body_, "", 0x334155, kText, f14_);
+    hud_street_ = Label(hud_body_, nullptr, kText, "");
+    lv_obj_set_width(hud_street_, W - 16);
+    lv_label_set_long_mode(hud_street_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(hud_street_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(hud_street_, 8, 206);
+    // filled in by the timer (the panel may not be on screen yet)
+}
+
+// Polyline + arrow head, drawn in a 72x72 box. Right-hand turns mirror the left ones.
+void Launcher::HudDrawArrow(int trn, int exit) {
+    lv_obj_clean(hud_arrow_);
+    int slot = 0;
+    auto line = [&](std::initializer_list<lv_point_precise_t> pts, bool mirror, bool head, uint32_t color) {
+        if (slot >= 4) return;
+        lv_point_precise_t* p = hud_pts_[slot];
+        int n = 0;
+        for (auto pt : pts) {
+            if (n >= 7) break;
+            p[n++] = {mirror ? 72 - pt.x : pt.x, pt.y};
+        }
+        if (head && n >= 2) {
+            float dx = p[n - 1].x - p[n - 2].x, dy = p[n - 1].y - p[n - 2].y;
+            float len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                dx /= len;
+                dy /= len;
+                lv_point_precise_t e = p[n - 1];
+                // the shaft stops short of the tip; the head is a wide chevron
+                p[n - 1] = {(lv_value_precise_t)(e.x - dx * 4), (lv_value_precise_t)(e.y - dy * 4)};
+                lv_point_precise_t* h = hud_pts_[slot + 1 < 4 ? slot + 1 : slot];
+                h[0] = {(lv_value_precise_t)(e.x - dx * 15 - dy * 13), (lv_value_precise_t)(e.y - dy * 15 + dx * 13)};
+                h[1] = e;
+                h[2] = {(lv_value_precise_t)(e.x - dx * 15 + dy * 13), (lv_value_precise_t)(e.y - dy * 15 - dx * 13)};
+                if (slot + 1 < 4) {
+                    lv_obj_t* hl = lv_line_create(hud_arrow_);
+                    lv_line_set_points(hl, h, 3);
+                    lv_obj_set_style_line_width(hl, 9, 0);
+                    lv_obj_set_style_line_color(hl, lv_color_hex(color), 0);
+                    lv_obj_set_style_line_rounded(hl, true, 0);
+                }
+            }
+        }
+        lv_obj_t* l = lv_line_create(hud_arrow_);
+        lv_line_set_points(l, p, n);
+        lv_obj_set_style_line_width(l, 9, 0);
+        lv_obj_set_style_line_color(l, lv_color_hex(color), 0);
+        lv_obj_set_style_line_rounded(l, true, 0);
+        slot += head ? 2 : 1;
+    };
+    auto ring = [&](int exit_no) {
+        lv_obj_t* c = lv_obj_create(hud_arrow_);
+        lv_obj_remove_style_all(c);
+        lv_obj_set_size(c, 30, 30);
+        lv_obj_set_pos(c, 21, 17);
+        lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(c, 6, 0);
+        lv_obj_set_style_border_color(c, lv_color_hex(0xFFFFFF), 0);
+        if (exit_no > 0) {
+            lv_obj_t* n = Label(c, f14_, kText, std::to_string(exit_no).c_str());
+            lv_obj_center(n);
+        }
+    };
+    const uint32_t white = 0xFFFFFF;
+    switch (trn) {
+        case 1: line({{36, 68}, {36, 6}}, false, true, white); break;
+        case 2: line({{46, 68}, {46, 30}, {8, 30}}, false, true, white); break;
+        case 3: line({{46, 68}, {46, 30}, {8, 30}}, true, true, white); break;
+        case 4: case 13: case 15: line({{46, 68}, {46, 42}, {16, 12}}, false, true, white); break;
+        case 5: case 14: case 16: line({{46, 68}, {46, 42}, {16, 12}}, true, true, white); break;
+        case 6: line({{50, 68}, {50, 18}, {14, 54}}, false, true, white); break;
+        case 7: line({{50, 68}, {50, 18}, {14, 54}}, true, true, white); break;
+        case 8: line({{50, 68}, {50, 26}, {44, 14}, {34, 10}, {24, 14}, {20, 26}, {20, 56}}, false, true, white); break;
+        case 9: line({{50, 68}, {50, 26}, {44, 14}, {34, 10}, {24, 14}, {20, 26}, {20, 56}}, true, true, white); break;
+        case 10: case 19:
+            ring(exit);
+            line({{36, 68}, {36, 47}}, false, false, white);
+            line({{36, 17}, {36, 2}}, false, true, white);
+            break;
+        case 11:
+            ring(exit);
+            line({{36, 68}, {36, 47}}, false, false, white);
+            line({{21, 32}, {3, 32}}, false, true, white);
+            break;
+        case 12:
+            ring(exit);
+            line({{36, 68}, {36, 47}}, false, false, white);
+            line({{21, 32}, {3, 32}}, true, true, white);
+            break;
+        case 20:
+            ring(exit);
+            line({{44, 68}, {44, 45}}, false, false, white);
+            line({{28, 45}, {28, 68}}, false, true, white);
+            break;
+        case 17:
+            line({{22, 68}, {22, 6}}, false, false, white);
+            line({{22, 8}, {58, 19}, {22, 30}}, false, false, kGreen);
+            break;
+        default:
+            break;
+    }
+}
+
+void Launcher::HudRefresh() {
+    if (app_id_ != kAppHud || mode_ == Mode::kHidden) {
+        if (hud_timer_) {
+            lv_timer_delete(hud_timer_);
+            hud_timer_ = nullptr;
+        }
+        return;
+    }
+    auto& link = HudLink::GetInstance();
+    if (mode_ != Mode::kApp) return;  // an overlay is on top
+    if (link.connected() != hud_live_) {
+        OpenApp(kAppHud);  // switch between the setup help and the live view
+        return;
+    }
+    if (!hud_live_ || hud_body_ == nullptr) return;
+
+    struct tm tmv = Now();
+    lv_label_set_text_fmt(hud_clock_, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+
+    bool stale = link.SilenceMs() > 3000;
+    HudState s;
+    int rev = link.Snapshot(s);
+    if (rev == hud_rev_ && stale == hud_stale_) return;
+    hud_rev_ = rev;
+    hud_stale_ = stale;
+    lv_obj_set_style_opa(hud_body_, stale ? LV_OPA_40 : LV_OPA_COVER, 0);
+
+    // Top line: lanes, ETA or state
+    bool lanes = s.nav && !s.lanes.empty() && !stale;
+    if (lanes) {
+        lv_obj_clean(hud_lanes_);
+        size_t n = s.lanes.size() > 8 ? 8 : s.lanes.size();
+        for (size_t i = 0; i < n; i++) {
+            bool rec = s.lanes[i].second != 0;
+            lv_obj_t* box = lv_obj_create(hud_lanes_);
+            lv_obj_remove_style_all(box);
+            lv_obj_set_size(box, 20, 20);
+            lv_obj_set_style_radius(box, 4, 0);
+            lv_obj_set_style_bg_color(box, lv_color_hex(rec ? 0xFFFFFF : 0x334155), 0);
+            lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+            lv_obj_t* a = Label(box, f14_, rec ? 0x000000 : kMuted,
+                                HudLaneSymbol(rec ? s.lanes[i].second : s.lanes[i].first));
+            lv_obj_center(a);
+        }
+        lv_obj_remove_flag(hud_lanes_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(hud_top_, "");
+    } else {
+        lv_obj_add_flag(hud_lanes_, LV_OBJ_FLAG_HIDDEN);
+        std::string top;
+        uint32_t color = kMuted;
+        if (stale) {
+            top = "Mất tín hiệu từ điện thoại";
+            color = 0xF87171;
+        } else if (s.nav) {
+            std::string num, unit;
+            HudDistance(s.rm, num, unit);
+            if (!s.eta.empty()) top = "Đến " + s.eta + " · ";
+            top += HudMinutes(s.rmin) + " · " + num + " " + unit;
+        } else {
+            top = "Chưa có lộ trình";
+        }
+        lv_obj_set_style_text_color(hud_top_, lv_color_hex(color), 0);
+        lv_label_set_text(hud_top_, top.c_str());
+    }
+
+    // Manoeuvre
+    bool turn = s.nav && s.trn != 0;
+    int key = turn ? s.trn * 100 + s.exit : 0;
+    if (key != hud_arrow_key_) {
+        hud_arrow_key_ = key;
+        hud_dst_start_ = s.dst;
+        if (turn) {
+            HudDrawArrow(s.trn, s.exit);
+        } else {
+            lv_obj_clean(hud_arrow_);
+            lv_obj_t* icon = Label(hud_arrow_, f28_, kAccent, LV_SYMBOL_GPS);
+            lv_obj_align(icon, LV_ALIGN_CENTER, 0, -6);
+            lv_obj_t* free_lbl = Label(hud_arrow_, f14_, kMuted, "Chạy tự do");
+            lv_obj_align(free_lbl, LV_ALIGN_BOTTOM_MID, 0, 0);
+        }
+    }
+    if (turn && s.dst >= 0) {
+        std::string num, unit;
+        HudDistance(s.dst, num, unit);
+        lv_label_set_text(hud_dist_, num.c_str());
+        lv_label_set_text(hud_dist_unit_, unit.c_str());
+        lv_obj_update_layout(hud_dist_);
+        lv_obj_set_pos(hud_dist_unit_, 10 + lv_obj_get_width(hud_dist_), 124);
+        if (s.dst > hud_dst_start_) hud_dst_start_ = s.dst;
+        int w = hud_dst_start_ > 0 ? 72 * s.dst / hud_dst_start_ : 0;
+        lv_obj_set_width(hud_dist_bar_, w < 4 ? 4 : w);
+    } else {
+        lv_label_set_text(hud_dist_, "");
+        lv_label_set_text(hud_dist_unit_, "");
+        lv_obj_set_width(hud_dist_bar_, 0);
+    }
+
+    // Speed and limit
+    lv_label_set_text_fmt(hud_speed_, "%d", s.spd);
+    bool over = s.over || (s.lim > 0 && s.spd > s.lim);
+    lv_obj_set_style_text_color(hud_speed_, lv_color_hex(over ? 0xF87171 : kText), 0);
+    int top_speed = s.lim > 0 ? s.lim * 3 / 2 : 120;
+    if (top_speed < 60) top_speed = 60;
+    lv_arc_set_range(hud_arc_, 0, top_speed);
+    lv_arc_set_value(hud_arc_, s.spd > top_speed ? top_speed : s.spd);
+    uint32_t arc_color = over ? kRed : (s.lim > 0 && s.spd * 10 > s.lim * 9 ? 0xF59E0B : kGreen);
+    lv_obj_set_style_arc_color(hud_arc_, lv_color_hex(arc_color), LV_PART_INDICATOR);
+    if (s.lim > 0) {
+        lv_label_set_text_fmt(hud_limit_lbl_, "%d", s.lim);
+        lv_obj_remove_flag(hud_limit_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(hud_limit_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // Bottom line: nearest alert, no-passing zone, or street
+    bool show_alert = !s.alerts.empty() || s.avg;
+    if (show_alert) {
+        HudAlert a;
+        if (!s.alerts.empty()) {
+            a = s.alerts[0];
+        } else {
+            a.kind = 9;
+            a.dist = -1;
+        }
+        HudAlertInfo info = HudAlertText(a.kind);
+        std::string chip = info.chip;
+        std::string text = info.name;
+        if ((a.kind == 8 || a.kind == 22) && a.value > 0) {
+            chip = std::to_string(a.value);
+            if (a.kind == 8) text = "Giới hạn " + std::to_string(a.value) + " km/h";
+        }
+        if (a.kind == 6) {
+            static const char* kJam[] = {"", " nhẹ", " vừa", " nặng", " đứng yên", " đường đóng"};
+            if (a.severity >= 1 && a.severity <= 5) text += kJam[a.severity];
+            if (a.minutes > 0) text += " · +" + std::to_string(a.minutes) + " phút";
+        }
+        if (s.alerts.empty() && s.avg && s.avg_left > 0) {
+            std::string num, unit;
+            HudDistance(s.avg_left, num, unit);
+            text += " · còn " + num + " " + unit;
+        }
+        lv_label_set_text(hud_chip_lbl_, chip.c_str());
+        lv_obj_set_style_bg_color(hud_chip_, lv_color_hex(info.color), 0);
+        lv_obj_remove_flag(hud_chip_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_update_layout(hud_chip_);
+        int x = 8 + lv_obj_get_width(hud_chip_) + 6;
+
+        std::string dist;
+        if (a.dist >= 0) {
+            std::string num, unit;
+            HudDistance(a.dist, num, unit);
+            dist = num + " " + unit;
+        }
+        lv_label_set_text(hud_alert_dist_, dist.c_str());
+        size_t more = s.alerts.size() > 1 ? s.alerts.size() - 1 : 0;
+        int right = W - 8;
+        if (more > 0) {
+            lv_label_set_text_fmt(lv_obj_get_child(hud_more_, 0), "+%u", (unsigned)more);
+            lv_obj_remove_flag(hud_more_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_update_layout(hud_more_);
+            right -= lv_obj_get_width(hud_more_);
+            lv_obj_set_pos(hud_more_, right, 208);
+            right -= 6;
+        } else {
+            lv_obj_add_flag(hud_more_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_update_layout(hud_alert_dist_);
+        right -= lv_obj_get_width(hud_alert_dist_);
+        lv_obj_set_pos(hud_alert_dist_, right, 206);
+        lv_label_set_text(hud_alert_, text.c_str());
+        lv_obj_set_width(hud_alert_, right - 6 - x > 20 ? right - 6 - x : 20);
+        lv_obj_set_pos(hud_alert_, x, 206);
+        lv_obj_add_flag(hud_street_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(hud_alert_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(hud_alert_dist_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(hud_chip_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(hud_alert_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(hud_alert_dist_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(hud_more_, LV_OBJ_FLAG_HIDDEN);
+        std::string street = s.nav && !s.st2.empty() ? s.st2 : s.st;
+        lv_label_set_text(hud_street_, street.c_str());
+        lv_obj_remove_flag(hud_street_, LV_OBJ_FLAG_HIDDEN);
     }
 }
