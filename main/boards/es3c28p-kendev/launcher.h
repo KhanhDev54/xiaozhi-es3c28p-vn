@@ -17,6 +17,8 @@
 
 #include <lvgl.h>
 
+#include <wifi_station.h>
+
 #include "bank_store.h"
 
 class Display;
@@ -89,6 +91,8 @@ private:
     void AppSystem();
     void AppSettings();
     void AppWifi();
+    void OpenWifi();           // Wi-Fi app from the start (network list)
+    void WifiConnect(const std::string& ssid, const std::string& password, uint8_t channel, bool new_password);
     void AppHud();             // Waze HUD: setup help, or the live navigation view
     void HudRefresh();         // 4 times a second while the HUD is open
     void HudDrawArrow(int trn, int exit);
@@ -205,6 +209,19 @@ private:
     uint64_t qr_amount_ = 0;
     uint64_t keypad_value_ = 0;
     lv_obj_t* keypad_lbl_ = nullptr;
+
+    // Wi-Fi app
+    enum class WifiView { kList, kSsid, kPassword, kConnecting, kResult };
+    WifiView wifi_view_ = WifiView::kList;
+    int64_t wifi_scan_shown_ = -1;
+    std::vector<WifiScanItem> wifi_list_;
+    std::string wifi_ssid_;
+    uint8_t wifi_channel_ = 0;
+    bool wifi_new_pw_ = false;
+    bool wifi_ok_ = false;
+    bool wifi_show_pw_ = false;
+    int64_t wifi_deadline_us_ = 0;
+    lv_obj_t* wifi_ta_ = nullptr;
 
     // Waze HUD
     lv_timer_t* hud_timer_ = nullptr;

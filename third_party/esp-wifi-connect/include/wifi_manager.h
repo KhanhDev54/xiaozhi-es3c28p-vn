@@ -87,6 +87,11 @@ public:
     std::string GetIpAddress() const;
     int GetRssi() const;
     int GetChannel() const;
+
+    // On-device network picker (see WifiStation)
+    bool StartUserScan();
+    std::vector<WifiScanItem> LastScan(int64_t* when_us = nullptr);
+    void ConnectTo(const std::string& ssid, const std::string& password, uint8_t channel);
     std::string GetMacAddress() const;
 
     // ==================== Config AP Mode ====================
