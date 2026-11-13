@@ -19,7 +19,9 @@
                 "CONFIG_LV_USE_FLEX=y",
                 "CONFIG_LV_USE_CANVAS=y",
                 "CONFIG_LV_USE_ARC=y",
-                "CONFIG_HTTPD_WS_SUPPORT=y"
+                "CONFIG_HTTPD_WS_SUPPORT=y",
+                "CONFIG_LV_USE_TEXTAREA=y",
+                "CONFIG_LV_USE_KEYBOARD=y"
             ]
         }
     ]
