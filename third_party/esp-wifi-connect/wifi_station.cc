@@ -224,11 +224,67 @@ void WifiStation::StartScan() {
     }
 }
 
-void WifiStation::HandleScanResult() {
-    uint16_t ap_num = 0;
-    esp_wifi_scan_get_ap_num(&ap_num);
-    wifi_ap_record_t *ap_records = (wifi_ap_record_t *)malloc(ap_num * sizeof(wifi_ap_record_t));
-    esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+void WifiStation::CacheScan(const wifi_ap_record_t* ap_records, uint16_t ap_num) {
+    std::vector<WifiScanItem> items;
+    for (int i = 0; i < ap_num; i++) {
+        const char* ssid = (const char*)ap_records[i].ssid;
+        if (ssid[0] == '\0') continue;  // hidden network
+        bool dup = false;
+        for (auto& it : items) {
+            if (it.ssid == ssid) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) continue;  // records are sorted, the first one is the strongest
+        items.push_back({ssid, ap_records[i].rssi, ap_records[i].primary, ap_records[i].authmode != WIFI_AUTH_OPEN});
+    }
+    std::lock_guard<std::mutex> lock(scan_mutex_);
+    last_scan_ = std::move(items);
+    last_scan_us_ = esp_timer_get_time();
+}
+
+bool WifiStation::StartUserScan() {
+    if (!IsConnected()) return false;  // the station's own scans fill the list
+    if (user_scan_) return true;
+    user_scan_ = true;
+    esp_err_t err = esp_wifi_scan_start(nullptr, false);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "User scan failed: %s", esp_err_to_name(err));
+        user_scan_ = false;
+        return false;
+    }
+    return true;
+}
+
+std::vector<WifiScanItem> WifiStation::LastScan(int64_t* when_us) {
+    std::lock_guard<std::mutex> lock(scan_mutex_);
+    if (when_us) *when_us = last_scan_us_;
+    return last_scan_;
+}
+
+void WifiStation::ConnectTo(const std::string& ssid, const std::string& password, uint8_t channel) {
+    ESP_LOGI(TAG, "Switching to %s", ssid.c_str());
+    WifiApRecord record = {};
+    record.ssid = ssid;
+    record.password = password;
+    record.channel = channel;
+    record.authmode = password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    connect_queue_.clear();
+    connect_queue_.push_back(record);
+    if (IsConnected()) {
+        // No retries on the old network: the disconnect handler moves on to the queue
+        reconnect_count_ = MAX_RECONNECT_COUNT;
+        esp_wifi_disconnect();
+    } else if (timer_handle_ && esp_timer_is_active(timer_handle_)) {
+        // Waiting for the next scan: scan now; the result is appended after this record
+        esp_timer_stop(timer_handle_);
+        esp_timer_start_once(timer_handle_, 1000 * 1000);
+    }
+    // else a connect attempt is running; the queue is used when it gives up
+}
+
+void WifiStation::HandleScanResult(wifi_ap_record_t* ap_records, uint16_t ap_num) {
     // sort by rssi descending
     std::sort(ap_records, ap_records + ap_num, [](const wifi_ap_record_t& a, const wifi_ap_record_t& b) {
         return a.rssi > b.rssi;
@@ -258,7 +314,6 @@ void WifiStation::HandleScanResult() {
             connect_queue_.push_back(record);
         }
     }
-    free(ap_records);
 
     if (connect_queue_.empty()) {
         if (last_scan_used_saved_channels_) {
@@ -414,7 +469,28 @@ void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32
         }
     } else if (event_id == WIFI_EVENT_SCAN_DONE) {
         xEventGroupSetBits(this_->event_group_, WIFI_EVENT_SCAN_DONE_BIT);
-        this_->HandleScanResult();
+        uint16_t ap_num = 0;
+        esp_wifi_scan_get_ap_num(&ap_num);
+        wifi_ap_record_t* ap_records = (wifi_ap_record_t*)malloc((ap_num ? ap_num : 1) * sizeof(wifi_ap_record_t));
+        if (ap_records == nullptr) {
+            esp_wifi_clear_ap_list();
+            ap_num = 0;
+        } else {
+            esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+            std::sort(ap_records, ap_records + ap_num, [](const wifi_ap_record_t& a, const wifi_ap_record_t& b) {
+                return a.rssi > b.rssi;
+            });
+            this_->CacheScan(ap_records, ap_num);
+        }
+        bool user = this_->user_scan_;
+        this_->user_scan_ = false;
+        if (user && this_->IsConnected()) {
+            // Scan for the on-device list only: keep the current connection
+            free(ap_records);
+            return;
+        }
+        this_->HandleScanResult(ap_records, ap_num);
+        free(ap_records);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(this_->event_group_, WIFI_EVENT_CONNECTED);
         

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <mutex>
 
 #include <esp_event.h>
 #include <esp_timer.h>
@@ -23,6 +24,14 @@ struct WifiApRecord {
     int channel;
     wifi_auth_mode_t authmode;
     uint8_t bssid[6];
+};
+
+// One network seen by a scan (for an on-device network list)
+struct WifiScanItem {
+    std::string ssid;
+    int8_t rssi;
+    uint8_t channel;
+    bool secure;
 };
 
 /**
@@ -64,6 +73,15 @@ public:
     // giving up and trying the next-best BSSID.
     void SetFailureRetryCnt(uint8_t cnt) { failure_retry_cnt_ = cnt; }
 
+    // On-device network picker. Every scan result is kept (strongest first, one row
+    // per SSID). While connected, StartUserScan() runs a scan that does not touch the
+    // connection; while not connected the station keeps scanning on its own and the
+    // list follows those scans. Returns false when no scan could be started.
+    bool StartUserScan();
+    std::vector<WifiScanItem> LastScan(int64_t* when_us = nullptr);
+    // Switch to this network now (save it first with SsidManager). channel 0 = unknown.
+    void ConnectTo(const std::string& ssid, const std::string& password, uint8_t channel);
+
 private:
     EventGroupHandle_t event_group_;
     esp_timer_handle_t timer_handle_ = nullptr;
@@ -92,8 +110,14 @@ private:
     bool use_saved_channels_scan_ = true;       // First scan uses saved channels when known
     bool last_scan_used_saved_channels_ = false;
 
+    std::mutex scan_mutex_;
+    std::vector<WifiScanItem> last_scan_;
+    int64_t last_scan_us_ = 0;
+    volatile bool user_scan_ = false;
+
     void StartScan();
-    void HandleScanResult();
+    void HandleScanResult(wifi_ap_record_t* ap_records, uint16_t ap_num);
+    void CacheScan(const wifi_ap_record_t* ap_records, uint16_t ap_num);
     void StartConnect();
     void UpdateScanInterval();  // Exponential backoff for scan interval
     static void WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);

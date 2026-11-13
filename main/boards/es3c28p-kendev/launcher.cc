@@ -8,8 +8,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <material_symbols.h>
+#include <ssid_manager.h>
 #include <wifi_manager.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -922,7 +924,7 @@ void Launcher::BuildControl() {
         if (self->rotate_) self->rotate_(s.rotate180);
     });
     Button(ctrl_, 110, 188, 80, 44, "Wi-Fi", kCard2, kText, [](lv_event_t* e) {
-        static_cast<Launcher*>(lv_event_get_user_data(e))->OpenApp(kAppWifi);
+        static_cast<Launcher*>(lv_event_get_user_data(e))->OpenWifi();
     });
     Button(ctrl_, 196, 188, 116, 44, "Khởi động lại", kCard2, 0xF87171, [](lv_event_t*) { esp_restart(); });
 }
@@ -1643,6 +1645,33 @@ void Launcher::RefreshApp() {
         case kAppSystem:
             if (tick_ % 3 == 0) OpenApp(kAppSystem);
             break;
+        case kAppWifi: {
+            auto& wifi = WifiManager::GetInstance();
+            if (wifi_view_ == WifiView::kList) {
+                int64_t when = 0;
+                wifi.LastScan(&when);
+                if (when != wifi_scan_shown_) OpenApp(kAppWifi);  // new scan results
+            } else if (wifi_view_ == WifiView::kConnecting) {
+                bool ok = wifi.IsConnected() && wifi.GetSsid() == wifi_ssid_;
+                if (ok || esp_timer_get_time() > wifi_deadline_us_) {
+                    wifi_ok_ = ok;
+                    if (!ok && wifi_new_pw_) {
+                        // forget a password that did not work
+                        auto& sm = SsidManager::GetInstance();
+                        const auto& list = sm.GetSsidList();
+                        for (size_t i = 0; i < list.size(); i++) {
+                            if (list[i].ssid == wifi_ssid_) {
+                                sm.RemoveSsid((int)i);
+                                break;
+                            }
+                        }
+                    }
+                    wifi_view_ = WifiView::kResult;
+                    OpenApp(kAppWifi);
+                }
+            }
+            break;
+        }
         case kAppSettings:
             // QR appears once the LAN server is up
             if (app_dynamic_ == nullptr && LanServer::GetInstance().running()) OpenApp(kAppSettings);
@@ -2073,27 +2102,208 @@ void Launcher::AppSettings() {
         static_cast<Launcher*>(lv_event_get_user_data(e))->StartCalibration();
     });
     Button(app_, 166, 194, 146, 40, "Wi-Fi", kCard2, kText, [](lv_event_t* e) {
-        static_cast<Launcher*>(lv_event_get_user_data(e))->OpenApp(kAppWifi);
+        static_cast<Launcher*>(lv_event_get_user_data(e))->OpenWifi();
     });
+}
+
+void Launcher::OpenWifi() {
+    wifi_view_ = WifiView::kList;
+    wifi_scan_shown_ = -1;
+    WifiManager::GetInstance().StartUserScan();
+    OpenApp(kAppWifi);
+}
+
+static uint32_t RssiColor(int rssi) {
+    if (rssi >= -60) return kGreen;
+    if (rssi >= -75) return 0xF59E0B;
+    return 0xF87171;
+}
+
+void Launcher::WifiConnect(const std::string& ssid, const std::string& password, uint8_t channel,
+                           bool new_password) {
+    wifi_ssid_ = ssid;
+    wifi_new_pw_ = new_password;
+    wifi_view_ = WifiView::kConnecting;
+    wifi_deadline_us_ = esp_timer_get_time() + 25 * 1000000LL;
+    RunAsync([ssid, password, channel]() {
+        SsidManager::GetInstance().AddSsid(ssid, password, channel);
+        WifiManager::GetInstance().ConnectTo(ssid, password, channel);
+    });
+    OpenApp(kAppWifi);
 }
 
 void Launcher::AppWifi() {
     StatusBar(app_, "Wi-Fi", &app_time_);
     auto& wifi = WifiManager::GetInstance();
-    std::string info = wifi.IsConnected()
-                           ? "Đang dùng: " + wifi.GetSsid() + "\nIP " + wifi.GetIpAddress() + " · " +
-                                 std::to_string(wifi.GetRssi()) + " dBm"
-                           : std::string("Chưa kết nối Wi-Fi.");
-    lv_obj_t* l = Label(app_, nullptr, kText, info.c_str());
+    wifi_ta_ = nullptr;
+
+    if (wifi_view_ == WifiView::kList) {
+        int64_t when = 0;
+        wifi_list_ = wifi.LastScan(&when);
+        wifi_scan_shown_ = when;
+        std::string current = wifi.IsConnected() ? wifi.GetSsid() : "";
+        if (!current.empty()) {
+            // the network in use goes first, even if the last scan missed it
+            auto it = std::find_if(wifi_list_.begin(), wifi_list_.end(),
+                                   [&](const WifiScanItem& w) { return w.ssid == current; });
+            WifiScanItem cur = {current, (int8_t)wifi.GetRssi(), (uint8_t)wifi.GetChannel(), true};
+            if (it != wifi_list_.end()) {
+                cur = *it;
+                wifi_list_.erase(it);
+            }
+            wifi_list_.insert(wifi_list_.begin(), cur);
+        }
+        const auto& saved = SsidManager::GetInstance().GetSsidList();
+
+        std::string sub = wifi_list_.empty() ? std::string("Đang tìm mạng...")
+                                             : std::to_string(wifi_list_.size()) + " mạng · chạm để kết nối";
+        lv_obj_t* hint = Label(app_, f14_, kMuted, sub.c_str());
+        lv_obj_set_pos(hint, 12, 36);
+        lv_obj_t* refresh = Button(app_, W - 52, 30, 44, 26, LV_SYMBOL_REFRESH, kCard2, kText, [](lv_event_t*) {
+            WifiManager::GetInstance().StartUserScan();
+        });
+        lv_obj_set_style_text_font(lv_obj_get_child(refresh, 0), f14_, 0);
+
+        lv_obj_t* list = lv_obj_create(app_);
+        lv_obj_remove_style_all(list);
+        lv_obj_set_pos(list, 8, 60);
+        lv_obj_set_size(list, W - 16, 132);
+        lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(list, 4, 0);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+        size_t n = wifi_list_.size() > 16 ? 16 : wifi_list_.size();
+        for (size_t i = 0; i < n; i++) {
+            const WifiScanItem& w = wifi_list_[i];
+            bool in_use = w.ssid == current;
+            bool is_saved = std::any_of(saved.begin(), saved.end(), [&](const SsidItem& s) { return s.ssid == w.ssid; });
+            lv_obj_t* row = lv_obj_create(list);
+            lv_obj_remove_style_all(row);
+            lv_obj_set_size(row, W - 16, 30);
+            lv_obj_set_style_radius(row, 8, 0);
+            lv_obj_set_style_bg_color(row, lv_color_hex(in_use ? 0x14532D : kCard), 0);
+            lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+            lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_user_data(row, (void*)(intptr_t)i);
+            lv_obj_t* sig = Label(row, f14_, RssiColor(w.rssi), LV_SYMBOL_WIFI);
+            lv_obj_align(sig, LV_ALIGN_LEFT_MID, 8, 0);
+            lv_obj_t* name = Label(row, nullptr, kText, w.ssid.c_str());
+            lv_obj_set_width(name, 170);
+            lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+            lv_obj_align(name, LV_ALIGN_LEFT_MID, 32, 0);
+            const char* tag = in_use ? "Đang dùng" : is_saved ? "Đã lưu" : !w.secure ? "Mở" : "";
+            lv_obj_t* t = Label(row, f14_, in_use ? kGreen : kMuted, tag);
+            lv_obj_align(t, LV_ALIGN_RIGHT_MID, -8, 0);
+            lv_obj_add_event_cb(row, [](lv_event_t* e) {
+                auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+                size_t idx = (size_t)(intptr_t)lv_obj_get_user_data(lv_event_get_current_target_obj(e));
+                if (idx >= self->wifi_list_.size()) return;
+                WifiScanItem w = self->wifi_list_[idx];
+                auto& wm = WifiManager::GetInstance();
+                if (wm.IsConnected() && wm.GetSsid() == w.ssid) return;
+                for (const auto& s : SsidManager::GetInstance().GetSsidList()) {
+                    if (s.ssid == w.ssid) {
+                        self->WifiConnect(w.ssid, s.password, w.channel, false);
+                        return;
+                    }
+                }
+                if (!w.secure) {
+                    self->WifiConnect(w.ssid, "", w.channel, true);
+                    return;
+                }
+                self->wifi_ssid_ = w.ssid;
+                self->wifi_channel_ = w.channel;
+                self->wifi_view_ = WifiView::kPassword;
+                self->OpenApp(kAppWifi);
+            }, LV_EVENT_CLICKED, this);
+        }
+
+        Button(app_, 8, 198, 148, 36, "+ Mạng ẩn", kCard2, kText, [](lv_event_t* e) {
+            auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+            self->wifi_ssid_.clear();
+            self->wifi_channel_ = 0;
+            self->wifi_view_ = WifiView::kSsid;
+            self->OpenApp(kAppWifi);
+        });
+        Button(app_, 164, 198, 148, 36, "Cài qua điện thoại", 0x2563EB, 0xFFFFFF, [](lv_event_t*) {
+            auto& board = static_cast<WifiBoard&>(Board::GetInstance());
+            board.EnterWifiConfigMode();
+        });
+        return;
+    }
+
+    if (wifi_view_ == WifiView::kSsid || wifi_view_ == WifiView::kPassword) {
+        bool pw = wifi_view_ == WifiView::kPassword;
+        std::string title = pw ? "Mật khẩu " + wifi_ssid_ : std::string("Tên mạng ẩn");
+        lv_obj_t* t = Label(app_, f14_, kMuted, title.c_str());
+        lv_obj_set_width(t, W - 24);
+        lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+        lv_obj_set_pos(t, 12, 30);
+        wifi_ta_ = lv_textarea_create(app_);
+        lv_textarea_set_one_line(wifi_ta_, true);
+        lv_textarea_set_max_length(wifi_ta_, pw ? 64 : 32);
+        lv_textarea_set_password_mode(wifi_ta_, pw && !wifi_show_pw_);
+        lv_obj_set_style_text_font(wifi_ta_, f14_, 0);
+        lv_obj_set_pos(wifi_ta_, 8, 50);
+        lv_obj_set_size(wifi_ta_, pw ? W - 76 : W - 16, 40);
+        lv_obj_remove_flag(wifi_ta_, LV_OBJ_FLAG_GESTURE_BUBBLE);
+        if (pw) {
+            Button(app_, W - 64, 50, 56, 40, wifi_show_pw_ ? "Ẩn" : "Hiện", kCard2, kText, [](lv_event_t* e) {
+                auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+                self->wifi_show_pw_ = !self->wifi_show_pw_;
+                if (self->wifi_ta_) lv_textarea_set_password_mode(self->wifi_ta_, !self->wifi_show_pw_);
+            });
+        }
+        lv_obj_t* kb = lv_keyboard_create(app_);
+        lv_obj_set_size(kb, W, H - 96);
+        lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_text_font(kb, f14_, 0);
+        lv_obj_remove_flag(kb, LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_keyboard_set_textarea(kb, wifi_ta_);
+        lv_obj_add_event_cb(kb, [](lv_event_t* e) {
+            auto code = lv_event_get_code(e);
+            if (code != LV_EVENT_READY && code != LV_EVENT_CANCEL) return;
+            auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+            if (code == LV_EVENT_CANCEL) {
+                self->wifi_view_ = WifiView::kList;
+                self->OpenApp(kAppWifi);
+                return;
+            }
+            std::string text = self->wifi_ta_ ? lv_textarea_get_text(self->wifi_ta_) : "";
+            if (self->wifi_view_ == WifiView::kSsid) {
+                if (text.empty()) return;
+                self->wifi_ssid_ = text;
+                self->wifi_view_ = WifiView::kPassword;
+                self->OpenApp(kAppWifi);
+                return;
+            }
+            if (!text.empty() && text.size() < 8) return;  // WPA needs 8+ characters (empty = open)
+            self->WifiConnect(self->wifi_ssid_, text, self->wifi_channel_, true);
+        }, LV_EVENT_ALL, this);
+        return;
+    }
+
+    if (wifi_view_ == WifiView::kConnecting) {
+        std::string text = "Đang kết nối\n" + wifi_ssid_ + "...";
+        lv_obj_t* l = Label(app_, nullptr, kText, text.c_str());
+        lv_obj_set_width(l, W - 24);
+        lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 70);
+        lv_obj_t* note = Label(app_, f14_, kMuted, "Trò chuyện tạm ngắt trong lúc đổi mạng.");
+        lv_obj_align(note, LV_ALIGN_TOP_MID, 0, 140);
+        return;
+    }
+
+    // kResult
+    std::string text = wifi_ok_ ? "Đã kết nối " + wifi_ssid_ + "\nIP " + wifi.GetIpAddress()
+                                : "Không vào được " + wifi_ssid_ + ".\nKiểm tra lại mật khẩu hoặc sóng Wi-Fi.";
+    lv_obj_t* l = Label(app_, nullptr, wifi_ok_ ? kGreen : 0xF87171, text.c_str());
     lv_obj_set_width(l, W - 24);
-    lv_obj_set_pos(l, 12, 40);
-    lv_obj_t* h = Label(app_, nullptr, kMuted,
-                        "Đổi mạng: loa sẽ phát Wi-Fi KenDev-xxxx. Dùng điện thoại vào mạng đó để chọn Wi-Fi mới.");
-    lv_obj_set_width(h, W - 24);
-    lv_obj_set_pos(h, 12, 96);
-    Button(app_, 12, 186, W - 24, 44, "Cài Wi-Fi mới", 0x2563EB, 0xFFFFFF, [](lv_event_t*) {
-        auto& board = static_cast<WifiBoard&>(Board::GetInstance());
-        board.EnterWifiConfigMode();
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 60);
+    Button(app_, 60, 180, W - 120, 44, wifi_ok_ ? "Xong" : "Chọn mạng khác", kCard2, kText, [](lv_event_t* e) {
+        static_cast<Launcher*>(lv_event_get_user_data(e))->OpenWifi();
     });
 }
 

@@ -179,6 +179,27 @@ bool WifiManager::IsConnected() const {
     return station_active_ && station_ && station_->IsConnected();
 }
 
+bool WifiManager::StartUserScan() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!station_active_ || !station_) return false;
+    return station_->StartUserScan();
+}
+
+std::vector<WifiScanItem> WifiManager::LastScan(int64_t* when_us) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!station_) {
+        if (when_us) *when_us = 0;
+        return {};
+    }
+    return station_->LastScan(when_us);
+}
+
+void WifiManager::ConnectTo(const std::string& ssid, const std::string& password, uint8_t channel) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!station_active_ || !station_) return;
+    station_->ConnectTo(ssid, password, channel);
+}
+
 std::string WifiManager::GetSsid() const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!station_active_ || !station_) return "";
