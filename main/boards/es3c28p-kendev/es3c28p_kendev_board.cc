@@ -5,6 +5,7 @@
 #include "wifi_board.h"
 #include "codecs/es8311_audio_codec.h"
 #include "display/lcd_display.h"
+#include "chat_screen.h"
 #include "esp_lcd_ili9341.h"
 #include "application.h"
 #include "button.h"
@@ -168,7 +169,7 @@ private:
         esp_lcd_panel_disp_on_off(panel, true);
         panel_ = panel;
 
-        display_ = new SpiLcdDisplay(panel_io, panel,
+        display_ = new KenChatDisplay(panel_io, panel,
             DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
             DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
