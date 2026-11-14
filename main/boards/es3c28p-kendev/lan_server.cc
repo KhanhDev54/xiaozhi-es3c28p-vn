@@ -13,6 +13,7 @@
 
 #include "bank_parser.h"
 #include "alarm_manager.h"
+#include "alarm_tones.h"
 #include "bank_store.h"
 #include "vietqr.h"
 
@@ -147,9 +148,17 @@ static std::string SetupPage(const std::string& token, const std::string& notice
          std::to_string(am.night_start()) + "></div><div><label>Đến (giờ)</label><input type=number min=0 max=23 name=ne value=" +
          std::to_string(am.night_end()) + "></div></div></fieldset>";
 
+    h += "<h2>Báo thức</h2><fieldset><label>Âm báo</label><select name=tone>";
+    for (int i = 0; i < AlarmToneCount(); i++) {
+        h += "<option value=" + std::to_string(i) + (i == am.tone() ? " selected" : "") + ">" + AlarmToneName(i) +
+             "</option>";
+    }
+    h += std::string("</select><label><input type=checkbox name=ramp value=1") + (am.ramp() ? " checked" : "") +
+         ">Âm lượng tăng dần trong 30 giây</label></fieldset>";
+
     h += "<h2>Khác</h2><fieldset>";
     h += std::string("<label><input type=checkbox name=read value=1") + (s.read_tx ? " checked" : "") +
-         ">Báo âm thanh khi có giao dịch</label>";
+         ">Báo \"ting\" và đọc số tiền khi có giao dịch</label>";
     h += std::string("<label><input type=checkbox name=home value=1") + (s.auto_home ? " checked" : "") +
          ">Tự về đồng hồ khi để yên</label></fieldset>";
     h += "<button>Lưu</button></form>";
@@ -218,6 +227,8 @@ static esp_err_t HandleSetupPost(httpd_req_t* req) {
     AlarmManager::GetInstance().SetNightMode(FormValue(body, "night") == "1",
                                              atoi(FormValue(body, "ns").c_str()) % 24,
                                              atoi(FormValue(body, "ne").c_str()) % 24);
+    if (!FormValue(body, "tone").empty()) AlarmManager::GetInstance().SetTone(atoi(FormValue(body, "tone").c_str()));
+    AlarmManager::GetInstance().SetRamp(FormValue(body, "ramp") == "1");
     s.read_tx = FormValue(body, "read") == "1";
     s.auto_home = FormValue(body, "home") == "1";
     store.SaveSettings(s);
