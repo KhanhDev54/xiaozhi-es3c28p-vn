@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "alarm_manager.h"
+#include "alarm_tones.h"
 #include "application.h"
 #include "assets/lang_config.h"
 #include "backlight.h"
@@ -1821,17 +1822,36 @@ void Launcher::AppTimer() {
         }
     }
 
+    // Alarm sound: tap to hear the next tone; ramp = louder over 30 s
+    std::string tone = std::string("Âm báo: ") + AlarmToneName(am.tone()) + "  " + LV_SYMBOL_RIGHT;
+    lv_obj_t* tb = Button(app_, 8, 88, 196, 32, tone.c_str(), kCard2, kText, [](lv_event_t* e) {
+        auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+        auto& am = AlarmManager::GetInstance();
+        int next = (am.tone() + 1) % AlarmToneCount();
+        am.SetTone(next);
+        am.PreviewTone(next);
+        self->OpenApp(kAppTimer);
+    });
+    lv_obj_set_style_text_font(lv_obj_get_child(tb, 0), f14_, 0);
+    lv_obj_t* rb = Button(app_, 210, 88, 102, 32, "Tăng dần", am.ramp() ? 0x2563EB : kCard2, kText, [](lv_event_t* e) {
+        auto* self = static_cast<Launcher*>(lv_event_get_user_data(e));
+        auto& am = AlarmManager::GetInstance();
+        am.SetRamp(!am.ramp());
+        self->OpenApp(kAppTimer);
+    });
+    lv_obj_set_style_text_font(lv_obj_get_child(rb, 0), f14_, 0);
+
     auto alarms = am.ListAlarms();
     if (alarms.empty()) {
         lv_obj_t* l = Label(app_, nullptr, kMuted, "Chưa có báo thức.\nNói \"đặt báo thức 6 giờ 30\" để thêm.");
         lv_obj_set_width(l, W - 24);
-        lv_obj_set_pos(l, 12, 100);
+        lv_obj_set_pos(l, 12, 134);
         return;
     }
     lv_obj_t* list = lv_obj_create(app_);
     lv_obj_remove_style_all(list);
-    lv_obj_set_size(list, W, H - 90);
-    lv_obj_set_pos(list, 0, 90);
+    lv_obj_set_size(list, W, H - 126);
+    lv_obj_set_pos(list, 0, 126);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(list, 4, 0);
     lv_obj_set_style_pad_hor(list, 8, 0);

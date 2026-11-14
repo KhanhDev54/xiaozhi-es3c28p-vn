@@ -1,4 +1,5 @@
 #include "alarm_manager.h"
+#include "alarm_tones.h"
 
 #include <cJSON.h>
 #include <esp_log.h>
@@ -9,6 +10,7 @@
 #include <cstdio>
 
 #include "application.h"
+#include "audio_codec.h"
 #include "assets/lang_config.h"
 #include "backlight.h"
 #include "board.h"
@@ -32,6 +34,9 @@ void AlarmManager::Load() {
     night_enabled_ = s.GetInt("night_on", 1) != 0;
     night_start_ = s.GetInt("night_start", 22);
     night_end_ = s.GetInt("night_end", 6);
+    tone_ = s.GetInt("tone", 0);
+    if (tone_ < 0 || tone_ >= AlarmToneCount()) tone_ = 0;
+    ramp_ = s.GetInt("ramp", 1) != 0;
 
     alarms_.clear();
     cJSON* arr = cJSON_Parse(raw.c_str());
@@ -72,6 +77,8 @@ void AlarmManager::Save() {
     s.SetInt("night_on", night_enabled_ ? 1 : 0);
     s.SetInt("night_start", night_start_);
     s.SetInt("night_end", night_end_);
+    s.SetInt("tone", tone_);
+    s.SetInt("ramp", ramp_ ? 1 : 0);
     cJSON_free(txt);
     cJSON_Delete(arr);
 }
@@ -149,6 +156,44 @@ void AlarmManager::StopRinging() {
     if (!ringing_) return;
     ringing_ = false;
     ring_seconds_ = 0;
+    if (ring_volume_ >= 0) {
+        if (auto* codec = Board::GetInstance().GetAudioCodec()) codec->SetOutputVolume(ring_volume_);
+        ring_volume_ = -1;
+    }
+}
+
+void AlarmManager::SetTone(int index) {
+    if (index < 0 || index >= AlarmToneCount()) index = 0;
+    std::lock_guard<std::mutex> lock(mutex_);
+    tone_ = index;
+    Save();
+}
+
+void AlarmManager::SetRamp(bool on) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ramp_ = on;
+    Save();
+}
+
+void AlarmManager::PreviewTone(int index) {
+    Application::GetInstance().Schedule([index]() { Application::GetInstance().PlaySound(AlarmToneOgg(index)); });
+}
+
+// Plays the chosen tone; with the ramp on, the volume climbs from 30% of the
+// user's volume to all of it over the first 30 seconds
+void AlarmManager::PlayRingTone() {
+    if (ramp_) {
+        auto* codec = Board::GetInstance().GetAudioCodec();
+        if (codec) {
+            if (ring_volume_ < 0) ring_volume_ = codec->output_volume();
+            int target = ring_volume_ < 30 ? 30 : ring_volume_;  // never ring too quietly
+            int start = target * 3 / 10;
+            int v = ring_seconds_ >= 30 ? target : start + (target - start) * ring_seconds_ / 30;
+            if (v != codec->output_volume()) codec->SetOutputVolume(v);
+        }
+    }
+    int t = tone_;
+    Application::GetInstance().Schedule([t]() { Application::GetInstance().PlaySound(AlarmToneOgg(t)); });
 }
 
 void AlarmManager::Snooze(int minutes) {
@@ -209,9 +254,7 @@ void AlarmManager::Ring(const std::string& title, const std::string& label) {
         ring_label_ = label;
     }
     // The launcher shows the ring screen (Báo lại / Tắt); just play the sound here
-    Application::GetInstance().Schedule([]() {
-        Application::GetInstance().PlaySound(Lang::Sounds::OGG_VIBRATION);
-    });
+    PlayRingTone();
 }
 
 void AlarmManager::UpdateNightMode(int hour) {
@@ -262,7 +305,7 @@ void AlarmManager::Tick() {
         } else if (ring_seconds_ >= kRingMaxSeconds) {
             StopRinging();
         } else if (ring_seconds_ % kRingEverySeconds == 0) {
-            app.Schedule([]() { Application::GetInstance().PlaySound(Lang::Sounds::OGG_VIBRATION); });
+            PlayRingTone();
         }
     }
 

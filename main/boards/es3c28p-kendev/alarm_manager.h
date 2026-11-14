@@ -51,6 +51,13 @@ public:
     std::string timer_label();
     // Keep the screen at normal brightness for a while (e.g. new bank alert)
     void WakeScreen(int seconds);
+    // Alarm sound: one of the built-in tones (alarm_tones.h), optionally getting
+    // louder over the first 30 seconds
+    int tone() const { return tone_; }
+    void SetTone(int index);
+    bool ramp() const { return ramp_; }
+    void SetRamp(bool on);
+    void PreviewTone(int index);
 
 private:
     AlarmManager() = default;
@@ -72,6 +79,10 @@ private:
 
     volatile bool ringing_ = false;
     int ring_seconds_ = 0;
+    int tone_ = 0;
+    bool ramp_ = true;
+    int ring_volume_ = -1;   // volume to go back to after a ramped ring, -1 = untouched
+    void PlayRingTone();
 
     bool night_enabled_ = true;
     int night_start_ = 22;
