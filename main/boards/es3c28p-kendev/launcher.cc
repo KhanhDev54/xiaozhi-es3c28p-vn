@@ -2083,7 +2083,8 @@ void Launcher::AppSystem() {
     else snprintf(b[5], 48, "-");
     snprintf(b[6], 48, "%d giờ %d phút", (int)(up / 3600), (int)(up % 3600 / 60));
     snprintf(b[7], 48, "KenDev %s", esp_app_get_description()->version);
-    static const char* kKeys[8] = {"Wi-Fi", "Địa chỉ IP", "Tín hiệu", "RAM trống/khối lớn", "PSRAM trống/khối lớn", "Nhiệt độ chip",
+    static const char* kKeys[8] = {"Wi-Fi", "Địa chỉ IP", "Tín hiệu",
+                                   "RAM trống/khối lớn", "PSRAM trống/khối lớn", "Nhiệt độ chip",
                                    "Thời gian chạy", "Phiên bản"};
     for (int i = 0; i < 8; i++) {
         int col = i % 2, row = i / 2;
