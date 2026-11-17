@@ -208,11 +208,13 @@ void RadioPlayer::Run() {
     bool ok = false;
     std::string ctype;
     for (int hop = 0; hop < 4 && !ok; hop++) {
+        zero::WaitForNetHeap();
         http = network->CreateHttp(1);
         http->SetHeader("Icy-MetaData", "0");
         http->SetHeader("User-Agent", "KenDev-Xiaozhi/1.0");
         if (auto opened = http->Open("GET", url); !opened) {
-            ESP_LOGE(TAG, "Open failed: %s", opened.error().ToString().c_str());
+            ESP_LOGE(TAG, "Open failed: %s (%s)", opened.error().ToString().c_str(),
+                     zero::HeapInfoString().c_str());
             // Some servers (stream.vovmedia.vn) reject the TLS handshake on this firmware.
             // Public streams: retry once over plain HTTP.
             if (url.rfind("https://", 0) == 0) {

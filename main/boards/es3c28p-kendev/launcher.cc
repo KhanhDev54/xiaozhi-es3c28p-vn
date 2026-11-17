@@ -2067,20 +2067,23 @@ void Launcher::AppSystem() {
     int64_t up = esp_timer_get_time() / 1000000;
     size_t sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t sram_min = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+    size_t sram_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
     size_t psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    size_t psram_block = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
     float temp = 0;
     bool has_temp = Board::GetInstance().GetTemperature(temp);
     char b[8][48];
     snprintf(b[0], 48, "%s", wifi.IsConnected() ? wifi.GetSsid().c_str() : "Chưa kết nối");
     snprintf(b[1], 48, "%s", wifi.IsConnected() ? wifi.GetIpAddress().c_str() : "-");
     snprintf(b[2], 48, "%d dBm", wifi.IsConnected() ? wifi.GetRssi() : 0);
-    snprintf(b[3], 48, "%uK (min %uK)", (unsigned)(sram / 1024), (unsigned)(sram_min / 1024));
-    snprintf(b[4], 48, "%.1f MB trống", psram / 1048576.0);
+    snprintf(b[3], 48, "%uK/%uK, min %uK", (unsigned)(sram / 1024), (unsigned)(sram_block / 1024),
+             (unsigned)(sram_min / 1024));
+    snprintf(b[4], 48, "%.1fMB/%uK", psram / 1048576.0, (unsigned)(psram_block / 1024));
     if (has_temp) snprintf(b[5], 48, "%.1f°C", temp);
     else snprintf(b[5], 48, "-");
     snprintf(b[6], 48, "%d giờ %d phút", (int)(up / 3600), (int)(up % 3600 / 60));
     snprintf(b[7], 48, "KenDev %s", esp_app_get_description()->version);
-    static const char* kKeys[8] = {"Wi-Fi", "Địa chỉ IP", "Tín hiệu", "RAM", "PSRAM", "Nhiệt độ chip",
+    static const char* kKeys[8] = {"Wi-Fi", "Địa chỉ IP", "Tín hiệu", "RAM trống/khối lớn", "PSRAM trống/khối lớn", "Nhiệt độ chip",
                                    "Thời gian chạy", "Phiên bản"};
     for (int i = 0; i < 8; i++) {
         int col = i % 2, row = i / 2;
